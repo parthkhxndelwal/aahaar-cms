@@ -1,0 +1,178 @@
+import { NextResponse } from "next/server"
+import bcrypt from "bcryptjs"
+import jwt from "jsonwebtoken"
+import { User, Court } from "@/models"
+
+export async function POST(request) {
+  try {
+    const { email, password, courtId, phone, otp, loginType = "password" } = await request.json()
+
+    if (loginType === "otp") {
+      // OTP-based login for users
+      if (!phone || !otp || !courtId) {
+        return NextResponse.json({ success: false, message: "Phone, OTP, and court ID are required" }, { status: 400 })
+      }
+
+      // TODO: Verify OTP from Redis/cache
+      // For demo purposes, accept "123456" as valid OTP
+      if (otp !== "123456") {
+        return NextResponse.json({ success: false, message: "Invalid OTP" }, { status: 401 })
+      }
+
+      // Find or create user with phone
+      let user = await User.findOne({
+        where: { phone, courtId },
+        include: [{ model: Court, as: "court" }],
+      })
+
+      if (!user) {
+        // Create new user for OTP login
+        user = await User.create({
+          courtId,
+          phone,
+          fullName: `User ${phone}`,
+          email: `${phone}@temp.com`,
+          role: "user",
+          status: "active",
+          phoneVerified: true,
+        })
+
+        // Fetch court info
+        const court = await Court.findOne({ where: { courtId } })
+        user.court = court
+      }
+
+      // Generate token
+      const token = jwt.sign({ userId: user.id, courtId: user.courtId, role: user.role }, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+      })
+
+      return NextResponse.json({
+        success: true,
+        message: "OTP login successful",
+        data: {
+          token,
+          user: {
+            id: user.id,
+            phone: user.phone,
+            fullName: user.fullName,
+            role: user.role,
+            courtId: user.courtId,
+            court: user.court,
+          },
+        },
+      })
+    }
+
+    // Email/password login
+    if (!email || !password || !courtId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Email, password, and court ID are required",
+        },
+        { status: 400 },
+      )
+    }
+
+    // Find user with court information
+    const user = await User.findOne({
+      where: {
+        email: email.toLowerCase(),
+        courtId,
+      },
+      include: [
+        {
+          model: Court,
+          as: "court",
+          attributes: ["courtId", "instituteName", "status"],
+        },
+      ],
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid credentials",
+        },
+        { status: 401 },
+      )
+    }
+
+    if (user.status !== "active") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Account is not active",
+        },
+        { status: 401 },
+      )
+    }
+
+    if (user.court.status !== "active") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Court is not active",
+        },
+        { status: 401 },
+      )
+    }
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password)
+    if (!isValidPassword) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid credentials",
+        },
+        { status: 401 },
+      )
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        courtId: user.courtId,
+        role: user.role,
+        email: user.email,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" },
+    )
+
+    // Update last login
+    await user.update({ lastLoginAt: new Date() })
+
+    return NextResponse.json({
+      success: true,
+      message: "Login successful",
+      data: {
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          role: user.role,
+          courtId: user.courtId,
+          court: {
+            courtId: user.court.courtId,
+            instituteName: user.court.instituteName,
+          },
+        },
+      },
+    })
+  } catch (error) {
+    console.error("Login error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Internal server error",
+      },
+      { status: 500 },
+    )
+  }
+}

@@ -1,0 +1,195 @@
+module.exports = (sequelize, DataTypes) => {
+  const Vendor = sequelize.define(
+    "Vendor",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      courtId: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        references: {
+          model: "courts",
+          key: "courtId",
+        },
+      },
+      userId: {
+        type: DataTypes.UUID,
+        allowNull: true, // Can be null initially
+        references: {
+          model: "users",
+          key: "id",
+        },
+      },
+      stallName: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          len: [2, 100],
+        },
+      },
+      vendorName: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          len: [2, 100],
+        },
+      },
+      contactEmail: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          isEmail: true,
+        },
+      },
+      contactPhone: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          len: [10, 15],
+        },
+      },
+      logoUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      bannerUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      cuisineType: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: [2, 50],
+        },
+      },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      operatingHours: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: {
+          monday: { open: "09:00", close: "18:00", closed: false },
+          tuesday: { open: "09:00", close: "18:00", closed: false },
+          wednesday: { open: "09:00", close: "18:00", closed: false },
+          thursday: { open: "09:00", close: "18:00", closed: false },
+          friday: { open: "09:00", close: "18:00", closed: false },
+          saturday: { open: "09:00", close: "18:00", closed: false },
+          sunday: { open: "09:00", close: "18:00", closed: true },
+        },
+      },
+      breakTimes: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: [],
+      },
+      status: {
+        type: DataTypes.ENUM("active", "inactive", "maintenance", "suspended"),
+        allowNull: false,
+        defaultValue: "inactive",
+      },
+      isOnline: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      maxConcurrentOrders: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 10,
+      },
+      averagePreparationTime: {
+        type: DataTypes.INTEGER, // in minutes
+        allowNull: false,
+        defaultValue: 15,
+      },
+      rating: {
+        type: DataTypes.DECIMAL(3, 2),
+        allowNull: false,
+        defaultValue: 0.0,
+      },
+      totalRatings: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      // Bank details for Razorpay payouts
+      bankAccountNumber: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      bankIfscCode: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      bankAccountHolderName: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      razorpayFundAccountId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      razorpayContactId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      payoutSettings: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: {
+          autoPayoutEnabled: true,
+          payoutFrequency: "daily", // daily, weekly, manual
+          minimumPayoutAmount: 100,
+        },
+      },
+      settings: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: {
+          acceptCOD: true,
+          acceptOnlinePayment: true,
+          orderBufferTime: 5, // minutes
+          autoAcceptOrders: false,
+        },
+      },
+      metadata: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: {},
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      tableName: "vendors",
+      indexes: [
+        {
+          unique: true,
+          fields: ["courtId", "stallName"],
+        },
+        {
+          fields: ["courtId", "status"],
+        },
+        {
+          fields: ["isOnline"],
+        },
+      ],
+    },
+  )
+
+  return Vendor
+}
