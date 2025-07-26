@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import { Plus, Edit, Trash2, Upload, X, Tag, Search } from "lucide-react"
+import { Plus, Edit, Trash2, Upload, X, Tag, Search, Package, Loader2 } from "lucide-react"
 
 interface MenuItem {
   id: string
@@ -41,6 +41,13 @@ interface MenuItem {
     name: string
     color?: string
   }
+  // Stock management fields
+  hasStock?: boolean // Whether to track stock for this item
+  stockQuantity?: number // Current stock count
+  minStockLevel?: number // Minimum stock before alert
+  maxStockLevel?: number // Maximum stock capacity
+  stockUnit?: string // Unit of measurement (pieces, kg, liters, etc.)
+  status?: "active" | "inactive" | "out_of_stock"
 }
 
 interface MenuCategory {
@@ -69,6 +76,7 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null)
   const [isCustomizeDrawerOpen, setIsCustomizeDrawerOpen] = useState(false)
+  const [updatingItems, setUpdatingItems] = useState<{[key: string]: boolean}>({}) // Track which items are being updated
   const [newCategory, setNewCategory] = useState<Partial<MenuCategory>>({
     name: "",
     description: "",
@@ -88,6 +96,11 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
     isVeg: true,
     ingredients: [],
     allergens: [],
+    hasStock: false,
+    stockQuantity: undefined,
+    minStockLevel: 5,
+    maxStockLevel: 100,
+    stockUnit: "pieces",
   })
 
   useEffect(() => {
@@ -249,6 +262,30 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
       })
 
       if (response.ok) {
+        const responseData = await response.json()
+        const savedItem = responseData.data?.menuItem
+        
+        if (editingItem && savedItem) {
+          // Update existing item in the list
+          setMenuItems(prev => prev.map(item => 
+            item.id === editingItem.id 
+              ? { 
+                  ...savedItem, 
+                  isVeg: savedItem.isVegetarian, // Map backend field to frontend
+                  category: savedItem.menuCategory?.name || savedItem.category || 'Other'
+                }
+              : item
+          ))
+        } else if (savedItem) {
+          // Add new item to the list
+          const newItemWithMapping = {
+            ...savedItem,
+            isVeg: savedItem.isVegetarian, // Map backend field to frontend
+            category: savedItem.menuCategory?.name || savedItem.category || 'Other'
+          }
+          setMenuItems(prev => [...prev, newItemWithMapping])
+        }
+        
         toast({
           title: "Success",
           description: `Menu item ${editingItem ? 'updated' : 'added'} successfully`,
@@ -267,8 +304,17 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
           isVeg: true,
           ingredients: [],
           allergens: [],
+          hasStock: false,
+          stockQuantity: undefined,
+          minStockLevel: 5,
+          maxStockLevel: 100,
+          stockUnit: "pieces",
         })
-        fetchMenuData()
+        
+        // Only refetch if the response doesn't include the saved item data
+        if (!savedItem) {
+          fetchMenuData()
+        }
       } else {
         const errorData = await response.json()
         throw new Error(errorData.error || 'Failed to save menu item')
@@ -285,6 +331,9 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
 
   const handleDeleteItem = async (id: string) => {
     try {
+      // Set loading state for this specific item
+      setUpdatingItems(prev => ({ ...prev, [id]: true }))
+      
       const response = await fetch(`/api/vendors/${user?.vendorProfile?.id}/menu/${id}`, {
         method: "DELETE",
         headers: {
@@ -293,11 +342,19 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
       })
 
       if (response.ok) {
+        // Remove the item from the list instead of refetching all data
+        setMenuItems(prev => prev.filter(item => item.id !== id))
+        
         toast({
           title: "Success",
           description: "Menu item deleted successfully",
         })
-        fetchMenuData()
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to delete menu item",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error deleting menu item:", error)
@@ -306,11 +363,17 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
         description: "Failed to delete menu item",
         variant: "destructive",
       })
+    } finally {
+      // Clear loading state for this item (though it will be removed anyway)
+      setUpdatingItems(prev => ({ ...prev, [id]: false }))
     }
   }
 
   const handleToggleAvailability = async (id: string, isAvailable: boolean) => {
     try {
+      // Set loading state for this specific item
+      setUpdatingItems(prev => ({ ...prev, [id]: true }))
+      
       const response = await fetch(`/api/vendors/${user?.vendorProfile?.id}/menu/${id}`, {
         method: "PATCH",
         headers: {
@@ -321,10 +384,32 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
       })
 
       if (response.ok) {
-        fetchMenuData()
+        // Update only the specific item instead of refetching all data
+        setMenuItems(prev => prev.map(item => 
+          item.id === id ? { ...item, isAvailable } : item
+        ))
+        
+        toast({
+          title: "Success",
+          description: `Item ${isAvailable ? 'made available' : 'made unavailable'} successfully`,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to update item availability",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error updating availability:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update item availability",
+        variant: "destructive",
+      })
+    } finally {
+      // Clear loading state for this item
+      setUpdatingItems(prev => ({ ...prev, [id]: false }))
     }
   }
 
@@ -428,10 +513,19 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Menu Management</h1>
-          <p className="text-gray-600">Manage your menu items and categories</p>
+          <h1 className="text-3xl font-bold text-neutral-100">Menu Management</h1>
+          <p className="text-neutral-400">Manage your menu items and categories</p>
         </div>
         <div className="flex gap-2">
+          {/* Inventory Management Button */}
+          <Button 
+            variant="outline" 
+            onClick={() => router.push(`/vendor/${courtId}/inventory`)}
+          >
+            <Package className="h-4 w-4 mr-2" />
+            Inventory
+          </Button>
+
           {/* Manage Categories Button */}
           <Drawer>
             <DrawerTrigger asChild>
@@ -477,7 +571,7 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
                         <div className="flex-1 min-w-0">
                           <h4 className="font-medium truncate">{category.name}</h4>
                           {category.description && (
-                            <p className="text-sm text-gray-500 truncate">{category.description}</p>
+                            <p className="text-sm text-neutral-500 truncate">{category.description}</p>
                           )}
                         </div>
                       </div>
@@ -574,7 +668,7 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 h-4 w-4" />
             <Input
               type="text"
               placeholder="Search menu items by name, description, category, ingredients, or allergens..."
@@ -587,14 +681,14 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
                 variant="ghost"
                 size="sm"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-100"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-neutral-100"
               >
                 <X className="h-3 w-3" />
               </Button>
             )}
           </div>
           {searchQuery && (
-            <div className="mt-2 text-sm text-gray-600">
+            <div className="mt-2 text-sm text-neutral-600">
               Found {filteredMenuItems.length} item{filteredMenuItems.length !== 1 ? 's' : ''} matching "{searchQuery}"
             </div>
           )}
@@ -602,83 +696,120 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
       </Card>
 
       {/* Menu Items Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredMenuItems.map((item) => (
-          <Card key={item.id} className="overflow-hidden">
-            <div className="relative">
-              {item.imageUrl && (
-                <img
-                  src={item.imageUrl}
-                  alt={item.name}
-                  className="w-full h-48 object-cover"
-                />
-              )}
-              <div className="absolute top-2 right-2 flex gap-1">
-                <Badge variant={item.isVeg ? "default" : "destructive"}>
-                  {item.isVeg ? "Veg" : "Non-Veg"}
-                </Badge>
-                <Badge variant={item.isAvailable ? "default" : "secondary"}>
-                  {item.isAvailable ? "Available" : "Unavailable"}
-                </Badge>
-              </div>
-            </div>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">{item.name}</CardTitle>
-                  <CardDescription>{item.description}</CardDescription>
+          <Card key={item.id} className={`overflow-hidden relative ${updatingItems[item.id] ? 'opacity-75' : ''}`}>
+            {updatingItems[item.id] && (
+              <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px] z-10 pointer-events-none rounded-lg" />
+            )}
+            <div className="flex flex-col aspect-[3/4]">
+              {/* Image Section - Top */}
+              <div className="w-full h-1/2 relative bg-neutral-200">
+                {item.imageUrl ? (
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-neutral-100">
+                    <span className="text-neutral-400 text-sm">No Image</span>
+                  </div>
+                )}
+                <div className="absolute top-2 left-2 flex flex-col gap-1">
+                  <Badge variant={item.isVeg ? "default" : "destructive"} className="text-xs">
+                    {item.isVeg ? "Veg" : "Non-Veg"}
+                  </Badge>
+                  <Badge variant={item.isAvailable ? "default" : "secondary"} className="text-xs">
+                    {item.isAvailable ? "Available" : "Unavailable"}
+                  </Badge>
+                  {item.hasStock && (
+                    <Badge 
+                      variant={
+                        !item.isAvailable || item.status === "out_of_stock" ? "destructive" :
+                        (item.stockQuantity || 0) <= (item.minStockLevel || 0) ? "secondary" : 
+                        "default"
+                      } 
+                      className="text-xs"
+                    >
+                      {!item.isAvailable || item.status === "out_of_stock" ? "Out of Stock" : 
+                       `Stock: ${item.stockQuantity || 0} ${item.stockUnit || 'pcs'}`}
+                    </Badge>
+                  )}
                 </div>
-                <div className="flex gap-1">
+                <div className="absolute bottom-2 leftd-2 flex gap-1">
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="default"
+                    className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
                     onClick={() => {
                       setEditingItem(item)
                       setIsAddDialogOpen(true)
                     }}
+                    disabled={updatingItems[item.id]}
                   >
                     <Edit className="h-3 w-3" />
                   </Button>
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="default"
+                    className="h-8 w-8 p-0 bg-white/80 hover:bg-white"
                     onClick={() => handleDeleteItem(item.id)}
+                    disabled={updatingItems[item.id]}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg font-semibold text-green-600">₹{item.price}</span>
-                      {item.mrp && item.mrp > item.price && (
-                        <span className="text-sm text-gray-500 line-through">₹{item.mrp}</span>
-                      )}
+              
+              {/* Content Section - Bottom */}
+              <div className="flex-1 flex flex-col h-2/3">
+                <CardHeader className="flex-none pb-2">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-lg truncate">{item.name}</CardTitle>
+                      <CardDescription className="text-sm line-clamp-2">{item.description}</CardDescription>
                     </div>
-                    {item.mrp && item.mrp > item.price && (
-                      <span className="text-xs text-green-600">
-                        {Math.round(((item.mrp - item.price) / item.mrp) * 100)}% off
-                      </span>
-                    )}
                   </div>
-                  <Badge variant="outline">{item.category}</Badge>
-                </div>
-                <div className="text-sm text-gray-600">
-                  Prep time: {item.preparationTime} mins
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Available</span>
-                  <Switch
-                    checked={item.isAvailable}
-                    onCheckedChange={(checked) => handleToggleAvailability(item.id, checked)}
-                  />
-                </div>
+                </CardHeader>
+                <CardContent className="flex-1 flex flex-col justify-between pt-0">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-semibold text-green-600">₹{item.price}</span>
+                          {item.mrp && Number(item.mrp) !== Number(item.price) && (
+                            <span className="text-sm text-neutral-500 line-through">₹{item.mrp}</span>
+                          )}
+                        </div>
+                        {item.mrp && Number(item.mrp) > Number(item.price) && (
+                          <span className="text-xs text-green-600">
+                            {Math.round(((Number(item.mrp) - Number(item.price)) / Number(item.mrp)) * 100)}% off
+                          </span>
+                        )}
+                      </div>
+                      <Badge variant="outline" className="text-xs">{item.category}</Badge>
+                    </div>
+                    <div className="text-sm text-neutral-600">
+                      Prep time: {item.preparationTime} mins
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm">Available</span>
+                    <div className="flex items-center gap-2">
+                      {updatingItems[item.id] && (
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      )}
+                      <Switch
+                        checked={item.isAvailable}
+                        onCheckedChange={(checked) => handleToggleAvailability(item.id, checked)}
+                        disabled={updatingItems[item.id]}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
               </div>
-            </CardContent>
+            </div>
           </Card>
         ))}
       </div>
@@ -688,9 +819,9 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
-              <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <Search className="h-12 w-12 text-neutral-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No items found</h3>
-              <p className="text-gray-600 mb-4">
+              <p className="text-neutral-600 mb-4">
                 No menu items match your search for "{searchQuery}"
               </p>
               <Button 
@@ -709,7 +840,7 @@ export default function VendorMenuPage({ params }: { params: Promise<{ courtId: 
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
               <h3 className="text-lg font-semibold mb-2">No menu items yet</h3>
-              <p className="text-gray-600 mb-4">Get started by adding your first menu item</p>
+              <p className="text-neutral-600 mb-4">Get started by adding your first menu item</p>
               <Button onClick={() => setIsAddDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Menu Item
@@ -778,7 +909,8 @@ function CategoryForm({
       // Upload image if a new one was selected
       if (uploadedImage) {
         const imageFormData = new FormData()
-        imageFormData.append('image', uploadedImage)
+        imageFormData.append('file', uploadedImage)
+        imageFormData.append('upload_preset', 'general')
 
         const uploadResponse = await fetch('/api/upload', {
           method: 'POST',
@@ -851,12 +983,12 @@ function CategoryForm({
         {/* Category Image Upload */}
         <div>
           <Label>Category Image (Recommended)</Label>
-          <p className="text-sm text-gray-500 mb-2">
+          <p className="text-sm text-neutral-500 mb-2">
             Adding an image helps customers identify your category easily
           </p>
           <div
             className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-              isDragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-300'
+              isDragOver ? 'border-blue-400 bg-blue-50' : 'border-neutral-300'
             }`}
             onDrop={handleDrop}
             onDragOver={(e) => {
@@ -886,8 +1018,8 @@ function CategoryForm({
               </div>
             ) : (
               <div>
-                <Upload className="h-6 w-6 mx-auto text-gray-400 mb-2" />
-                <p className="text-sm text-gray-600">
+                <Upload className="h-6 w-6 mx-auto text-neutral-400 mb-2" />
+                <p className="text-sm text-neutral-600">
                   Drag and drop an image here, or{' '}
                   <label className="text-blue-600 cursor-pointer hover:underline">
                     browse
@@ -902,7 +1034,7 @@ function CategoryForm({
                     />
                   </label>
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-neutral-400 mt-1">
                   Recommended: 400x200px, JPG or PNG
                 </p>
               </div>
@@ -967,6 +1099,17 @@ function MenuItemForm({
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
+  // Update form data when item prop changes
+  useEffect(() => {
+    setFormData(item)
+    if (item.imageUrl) {
+      setImagePreview(item.imageUrl)
+    } else {
+      setImagePreview(null)
+    }
+    setUploadedImage(null)
+  }, [item])
+
   useEffect(() => {
     if (item.imageUrl) {
       setImagePreview(item.imageUrl)
@@ -1001,7 +1144,8 @@ function MenuItemForm({
       // Upload image if a new one was selected
       if (uploadedImage) {
         const imageFormData = new FormData()
-        imageFormData.append('image', uploadedImage)
+        imageFormData.append('file', uploadedImage)
+        imageFormData.append('upload_preset', 'menu_items')
 
         const uploadResponse = await fetch('/api/upload', {
           method: 'POST',
@@ -1010,7 +1154,7 @@ function MenuItemForm({
 
         if (uploadResponse.ok) {
           const uploadData = await uploadResponse.json()
-          imageUrl = uploadData.url
+          imageUrl = uploadData.data?.url || uploadData.url
         }
       }
 
@@ -1129,7 +1273,7 @@ function MenuItemForm({
           <Label>Item Image</Label>
           <div
             className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-              isDragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-300'
+              isDragOver ? 'border-blue-400 bg-blue-50' : 'border-neutral-300'
             }`}
             onDrop={handleDrop}
             onDragOver={(e) => {
@@ -1159,8 +1303,8 @@ function MenuItemForm({
               </div>
             ) : (
               <div>
-                <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                <p className="text-sm text-gray-600">
+                <Upload className="h-8 w-8 mx-auto text-neutral-400 mb-2" />
+                <p className="text-sm text-neutral-600">
                   Drag and drop an image here, or{' '}
                   <label className="text-blue-600 cursor-pointer hover:underline">
                     browse
@@ -1178,6 +1322,89 @@ function MenuItemForm({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Stock Management Section */}
+        <div className="space-y-4 border-t pt-4">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="hasStock"
+              checked={formData.hasStock === true}
+              onCheckedChange={(checked) => setFormData(prev => ({ 
+                ...prev, 
+                hasStock: checked,
+                stockQuantity: checked ? 0 : undefined,
+                minStockLevel: checked ? 5 : undefined,
+                maxStockLevel: checked ? 100 : undefined,
+                stockUnit: checked ? "pieces" : undefined
+              }))}
+            />
+            <Label htmlFor="hasStock">Track Stock for this item</Label>
+          </div>
+          
+          {formData.hasStock && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="stockQuantity">Current Stock *</Label>
+                <Input
+                  id="stockQuantity"
+                  type="number"
+                  min="0"
+                  value={formData.stockQuantity || ""}
+                  onChange={(e) => setFormData(prev => ({ ...prev, stockQuantity: parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="stockUnit">Stock Unit</Label>
+                <Select
+                  value={formData.stockUnit || "pieces"}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, stockUnit: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pieces">Pieces</SelectItem>
+                    <SelectItem value="kg">Kg</SelectItem>
+                    <SelectItem value="grams">Grams</SelectItem>
+                    <SelectItem value="liters">Liters</SelectItem>
+                    <SelectItem value="ml">Milliliters</SelectItem>
+                    <SelectItem value="plates">Plates</SelectItem>
+                    <SelectItem value="bowls">Bowls</SelectItem>
+                    <SelectItem value="cups">Cups</SelectItem>
+                    <SelectItem value="boxes">Boxes</SelectItem>
+                    <SelectItem value="packets">Packets</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="minStockLevel">Minimum Stock Alert</Label>
+                <Input
+                  id="minStockLevel"
+                  type="number"
+                  min="0"
+                  value={formData.minStockLevel || ""}
+                  onChange={(e) => setFormData(prev => ({ ...prev, minStockLevel: parseInt(e.target.value) || 0 }))}
+                  placeholder="5"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="maxStockLevel">Maximum Stock Capacity</Label>
+                <Input
+                  id="maxStockLevel"
+                  type="number"
+                  min="0"
+                  value={formData.maxStockLevel || ""}
+                  onChange={(e) => setFormData(prev => ({ ...prev, maxStockLevel: parseInt(e.target.value) || 0 }))}
+                  placeholder="100"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center space-x-4">

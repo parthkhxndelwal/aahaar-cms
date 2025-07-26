@@ -111,6 +111,43 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: {},
       },
+      // Stock management fields
+      hasStock: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      stockQuantity: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          min: 0,
+        },
+      },
+      minStockLevel: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 5,
+        validate: {
+          min: 0,
+        },
+      },
+      maxStockLevel: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 100,
+        validate: {
+          min: 0,
+        },
+      },
+      stockUnit: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        defaultValue: "pieces",
+        validate: {
+          isIn: [["pieces", "kg", "grams", "liters", "ml", "plates", "bowls", "cups", "boxes", "packets"]],
+        },
+      },
       displayOrder: {
         type: DataTypes.INTEGER,
         allowNull: false,

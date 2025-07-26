@@ -110,6 +110,13 @@ export async function POST(request, { params }) {
         ? menuItemData.tags 
         : [],
       nutritionInfo: menuItemData.nutritionalInfo || {},
+      // Stock management fields
+      hasStock: menuItemData.hasStock || false,
+      stockQuantity: menuItemData.hasStock ? (parseInt(menuItemData.stockQuantity) || null) : null,
+      minStockLevel: menuItemData.hasStock ? (parseInt(menuItemData.minStockLevel) || 5) : null,
+      maxStockLevel: menuItemData.hasStock ? (parseInt(menuItemData.maxStockLevel) || 100) : null,
+      stockUnit: menuItemData.hasStock ? (menuItemData.stockUnit || 'pieces') : null,
+      status: menuItemData.hasStock && (parseInt(menuItemData.stockQuantity) || 0) === 0 ? 'out_of_stock' : 'active',
     }
 
     const menuItem = await MenuItem.create(cleanedData)

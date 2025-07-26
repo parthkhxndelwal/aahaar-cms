@@ -48,13 +48,13 @@ export default function VendorLayout({
   }
 
   return (
-    <div className={`flex h-screen bg-gray-100 ${isMobile ? 'flex-col' : ''}`}>
+    <div className={`flex h-screen bg-neutral-950 ${isMobile ? 'flex-col' : ''}`}>
       {/* Desktop Sidebar */}
       {!isMobile && <VendorSidebar courtId={courtId} />}
       
       <div className={`flex-1 flex flex-col overflow-hidden ${isMobile ? 'pb-16' : ''}`}>
         <VendorHeader />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-neutral-950 p-6">
           {children}
         </main>
       </div>

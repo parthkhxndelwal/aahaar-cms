@@ -34,6 +34,38 @@ export async function PATCH(request, { params }) {
       }, { status: 400 })
     }
 
+    // Handle stock updates and auto-update status
+    if (updateData.hasOwnProperty('stockQuantity')) {
+      const stockQuantity = parseInt(updateData.stockQuantity) || 0
+      
+      // Auto-update status based on stock quantity
+      if (menuItem.hasStock && stockQuantity === 0) {
+        updateData.status = 'out_of_stock'
+      } else if (updateData.status === 'out_of_stock' && stockQuantity > 0) {
+        updateData.status = 'active'
+      }
+    }
+
+    // If enabling stock tracking, set default values
+    if (updateData.hasStock === true && !menuItem.hasStock) {
+      updateData.minStockLevel = updateData.minStockLevel || 5
+      updateData.maxStockLevel = updateData.maxStockLevel || 100
+      updateData.stockUnit = updateData.stockUnit || 'pieces'
+      updateData.stockQuantity = updateData.stockQuantity || 0
+    }
+
+    // If disabling stock tracking, clear stock-related fields
+    if (updateData.hasStock === false) {
+      updateData.stockQuantity = null
+      updateData.minStockLevel = null
+      updateData.maxStockLevel = null
+      updateData.stockUnit = null
+      // Reset status if it was out_of_stock due to stock tracking
+      if (menuItem.status === 'out_of_stock') {
+        updateData.status = 'active'
+      }
+    }
+
     await menuItem.update(updateData)
 
     return NextResponse.json({
@@ -77,6 +109,34 @@ export async function PUT(request, { params }) {
         success: false, 
         message: "Selling price cannot be greater than MRP" 
       }, { status: 400 })
+    }
+
+    // Handle stock updates and auto-update status (same logic as PATCH)
+    if (updateData.hasOwnProperty('stockQuantity')) {
+      const stockQuantity = parseInt(updateData.stockQuantity) || 0
+      
+      if (menuItem.hasStock && stockQuantity === 0) {
+        updateData.status = 'out_of_stock'
+      } else if (updateData.status === 'out_of_stock' && stockQuantity > 0) {
+        updateData.status = 'active'
+      }
+    }
+
+    if (updateData.hasStock === true && !menuItem.hasStock) {
+      updateData.minStockLevel = updateData.minStockLevel || 5
+      updateData.maxStockLevel = updateData.maxStockLevel || 100
+      updateData.stockUnit = updateData.stockUnit || 'pieces'
+      updateData.stockQuantity = updateData.stockQuantity || 0
+    }
+
+    if (updateData.hasStock === false) {
+      updateData.stockQuantity = null
+      updateData.minStockLevel = null
+      updateData.maxStockLevel = null
+      updateData.stockUnit = null
+      if (menuItem.status === 'out_of_stock') {
+        updateData.status = 'active'
+      }
     }
 
     await menuItem.update(updateData)
