@@ -1,11 +1,13 @@
 "use client"
 import { use } from "react"
 import Link from "next/link"
-import { ArrowLeft, User, Lock, Bell, HelpCircle, Info, ChevronRight } from "lucide-react"
+import { ArrowLeft, User, Lock, Bell, HelpCircle, Info, ChevronRight, LogOut } from "lucide-react"
 import { motion } from "framer-motion"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function AccountSettingsPage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
+  const { logout } = useAuth()
 
   const accountOptions = [
     {
@@ -90,6 +92,27 @@ export default function AccountSettingsPage({ params }: { params: Promise<{ cour
             )
           })}
         </div>
+
+        {/* Logout Button */}
+        <motion.div
+          className="pt-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.3 }}
+        >
+          <div className="flex justify-center">
+            <motion.button
+              onClick={logout}
+              className="flex items-center space-x-3 px-6 py-3 bg-red-600/10 border border-red-600/20 rounded-lg text-red-400 hover:bg-red-600/20 transition-colors"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            >
+              <LogOut className="h-5 w-5" />
+              <span className="font-medium">Log out</span>
+            </motion.button>
+          </div>
+        </motion.div>
       </div>
     </motion.div>
   )
