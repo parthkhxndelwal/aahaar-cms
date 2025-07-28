@@ -15,8 +15,27 @@ import { api } from "@/lib/api"
 export default function UserLogin() {
   const params = useParams()
   const router = useRouter()
-  const { login } = useAuth()
+  const { login, user, token } = useAuth()
   const courtId = params.courtId as string
+
+  // Get return URL from query parameters
+  const [returnTo, setReturnTo] = useState<string>("")
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const returnUrl = urlParams.get('returnTo')
+    if (returnUrl) {
+      setReturnTo(returnUrl)
+    }
+  }, [])
+
+  // Redirect already authenticated users
+  useEffect(() => {
+    if (user && token) {
+      const redirectUrl = returnTo || `/app/${courtId}`
+      router.push(redirectUrl)
+    }
+  }, [user, token, returnTo, courtId, router])
 
   const [loading, setLoading] = useState(false)
   const [courtLoading, setCourtLoading] = useState(true)
@@ -130,7 +149,9 @@ export default function UserLogin() {
 
       if (response.success) {
         login(response.data.token, response.data.user)
-        router.push(`/app/${courtId}`)
+        // Redirect to return URL if provided, otherwise go to home
+        const redirectUrl = returnTo || `/app/${courtId}`
+        router.push(redirectUrl)
       } else {
         setError(response.message || "Invalid OTP")
       }
@@ -160,7 +181,9 @@ export default function UserLogin() {
 
       if (response.success) {
         login(response.data.token, response.data.user)
-        router.push(`/app/${courtId}`)
+        // Redirect to return URL if provided, otherwise go to home
+        const redirectUrl = returnTo || `/app/${courtId}`
+        router.push(redirectUrl)
       } else {
         setError(response.message || "Invalid credentials")
       }
@@ -182,6 +205,18 @@ export default function UserLogin() {
         <div className="flex items-center space-x-4">
           <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
           <span className="text-lg text-white">Loading food court...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Show loading while checking authentication
+  if (user && token) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
+        <div className="flex items-center space-x-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+          <span className="text-lg text-white">Already logged in, redirecting...</span>
         </div>
       </div>
     )

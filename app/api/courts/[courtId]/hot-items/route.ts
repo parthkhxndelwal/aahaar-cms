@@ -25,7 +25,8 @@ export async function GET(
     const { courtId } = await params
 
     // Fetch available menu items from active vendors in this court
-    const menuItems = await MenuItem.findAll({
+    // First try with strict vendor constraints
+    let menuItems = await MenuItem.findAll({
       where: {
         status: "active",
         isAvailable: true,
@@ -40,6 +41,7 @@ export async function GET(
             isOnline: true,
           },
           attributes: ["id", "stallName", "cuisineType"],
+          required: true,
         },
       ],
       attributes: [
@@ -52,8 +54,49 @@ export async function GET(
         "vendorId",
         "category"
       ],
-      limit: 20, // Get more items to choose from
+      order: [
+        ['createdAt', 'DESC'],
+      ],
+      limit: 50,
     })
+
+    // If we don't have enough items from active/online vendors, 
+    // try with relaxed constraints (just active vendors)
+    if (menuItems.length < 3) {
+      menuItems = await MenuItem.findAll({
+        where: {
+          status: "active",
+          isAvailable: true,
+        },
+        include: [
+          {
+            model: Vendor,
+            as: "vendor",
+            where: {
+              courtId,
+              status: "active",
+              // Remove isOnline constraint for fallback
+            },
+            attributes: ["id", "stallName", "cuisineType"],
+            required: true,
+          },
+        ],
+        attributes: [
+          "id",
+          "name", 
+          "description",
+          "price",
+          "mrp",
+          "imageUrl",
+          "vendorId",
+          "category"
+        ],
+        order: [
+          ['createdAt', 'DESC'],
+        ],
+        limit: 50,
+      })
+    }
 
     if (!menuItems || menuItems.length === 0) {
       // Return mock data if no real items found
@@ -108,9 +151,29 @@ export async function GET(
       })
     }
 
-    // Randomly select 3 items from available menu items
+    // Randomly select 3 items from available menu items, prioritizing different vendors
+    let selectedItems: any[] = []
+    const usedVendorIds = new Set<string>()
     const shuffled = [...menuItems].sort(() => 0.5 - Math.random())
-    const selectedItems = shuffled.slice(0, 3)
+    
+    // First pass: try to get one item from each vendor
+    for (const item of shuffled) {
+      if (selectedItems.length >= 3) break
+      if (!usedVendorIds.has(item.vendorId)) {
+        selectedItems.push(item)
+        usedVendorIds.add(item.vendorId)
+      }
+    }
+    
+    // Second pass: if we don't have 3 items yet, add more from any vendor
+    if (selectedItems.length < 3) {
+      for (const item of shuffled) {
+        if (selectedItems.length >= 3) break
+        if (!selectedItems.find(selected => selected.id === item.id)) {
+          selectedItems.push(item)
+        }
+      }
+    }
 
     // Transform the data to match the expected format
     const hotItems: HotMenuItem[] = selectedItems.map((item: any) => ({

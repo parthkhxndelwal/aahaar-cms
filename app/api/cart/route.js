@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { authenticateToken } from "@/middleware/auth"
-import { MenuItem, Cart, CartItem, User } from "@/models"
+import { MenuItem, Cart, CartItem, User, Vendor } from "@/models"
 
 export async function GET(request) {
   try {
@@ -24,7 +24,14 @@ export async function GET(request) {
             {
               model: MenuItem,
               as: 'menuItem',
-              attributes: ['id', 'name', 'price', 'imageUrl']
+              attributes: ['id', 'name', 'price', 'imageUrl', 'vendorId'],
+              include: [
+                {
+                  model: Vendor,
+                  as: 'vendor',
+                  attributes: ['id', 'stallName', 'vendorName']
+                }
+              ]
             }
           ]
         }
@@ -51,7 +58,9 @@ export async function GET(request) {
         quantity: item.quantity,
         subtotal: parseFloat(item.subtotal),
         customizations: item.customizations,
-        vendorId: item.menuItem.vendorId
+        vendorId: item.menuItem.vendorId,
+        imageUrl: item.menuItem.imageUrl,
+        vendorName: item.menuItem.vendor?.stallName || 'Unknown Vendor'
       })) || [],
       total: parseFloat(cart.total || 0)
     }
@@ -141,7 +150,14 @@ export async function POST(request) {
             {
               model: MenuItem,
               as: 'menuItem',
-              attributes: ['id', 'name', 'price', 'imageUrl', 'vendorId']
+              attributes: ['id', 'name', 'price', 'imageUrl', 'vendorId'],
+              include: [
+                {
+                  model: Vendor,
+                  as: 'vendor',
+                  attributes: ['id', 'stallName', 'vendorName']
+                }
+              ]
             }
           ]
         }
@@ -156,7 +172,9 @@ export async function POST(request) {
         quantity: item.quantity,
         subtotal: parseFloat(item.subtotal),
         customizations: item.customizations,
-        vendorId: item.menuItem.vendorId
+        vendorId: item.menuItem.vendorId,
+        imageUrl: item.menuItem.imageUrl,
+        vendorName: item.menuItem.vendor?.stallName || 'Unknown Vendor'
       })),
       total: parseFloat(updatedCart.total)
     }

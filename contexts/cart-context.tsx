@@ -11,6 +11,7 @@ interface CartItem {
   customizations?: Record<string, any>
   vendorId: string
   imageUrl?: string
+  vendorName?: string
 }
 
 interface Cart {

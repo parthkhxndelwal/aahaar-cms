@@ -17,14 +17,8 @@ export default function AccountSettingsPage({ params }: { params: Promise<{ cour
       href: `/app/${courtId}/settings/account/profile`,
     },
     {
-      title: "Change Password",
-      description: "Update your account password for security",
-      icon: Lock,
-      href: `/app/${courtId}/settings/account/change-password`,
-    },
-    {
-      title: "Receive Activity Log",
-      description: "Get notifications about your account activity",
+      title: "View Activity Log",
+      description: "Review recent activity about your account activity",
       icon: Bell,
       href: `/app/${courtId}/settings/account/activity-logs`,
     }
