@@ -2,7 +2,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Home, Store, Settings, ShoppingCart, Clock } from "lucide-react"
+import { Home, Store, Settings, ShoppingCart, Clock, Package } from "lucide-react"
 import { useBottomNav } from "@/contexts/bottom-nav-context"
 import { useCart } from "@/contexts/cart-context"
 import { motion, AnimatePresence } from "framer-motion"
@@ -37,6 +37,11 @@ export function BottomNavigation({ courtId }: BottomNavigationProps) {
             name: "Home",
             href: `/app/${courtId}`,
             icon: Home,
+        },
+        {
+            name: "Orders",
+            href: `/app/${courtId}/orders`,
+            icon: Package,
         },
         {
             name: "Vendors",

@@ -1,6 +1,7 @@
 "use client"
 import { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { useAuth } from "./auth-context"
+import { usePathname } from "next/navigation"
 
 interface CartItem {
   menuItemId: string
@@ -34,11 +35,15 @@ const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user, token } = useAuth()
+  const pathname = usePathname()
   const [cart, setCart] = useState<Cart>({ items: [], total: 0 })
   const [isLoading, setIsLoading] = useState(false)
 
+  // Only enable cart functionality on customer app pages
+  const isCustomerApp = pathname.startsWith('/app/') && !pathname.endsWith('/login')
+
   const refreshCart = async () => {
-    if (!user || !token) {
+    if (!user || !token || !isCustomerApp) {
       setCart({ items: [], total: 0 })
       return
     }
@@ -65,7 +70,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   const addToCart = async (menuItemId: string, quantity = 1, customizations = {}) => {
-    if (!user || !token) return false
+    if (!user || !token || !isCustomerApp) return false
 
     try {
       setIsLoading(true)
@@ -101,7 +106,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   const removeFromCart = async (menuItemId: string) => {
-    if (!user || !token) return false
+    if (!user || !token || !isCustomerApp) return false
 
     // Check if item exists in cart first
     const existingItem = cart.items.find(item => item.menuItemId === menuItemId)
@@ -138,7 +143,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   const updateQuantity = async (menuItemId: string, quantity: number, isRetry = false): Promise<boolean> => {
-    if (!user || !token) return false
+    if (!user || !token || !isCustomerApp) return false
 
     if (quantity <= 0) {
       return removeFromCart(menuItemId)
@@ -194,7 +199,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   const clearCart = async () => {
-    if (!user || !token) return false
+    if (!user || !token || !isCustomerApp) return false
 
     try {
       const response = await fetch("/api/cart", {
@@ -221,7 +226,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshCart()
-  }, [user, token])
+  }, [user, token, isCustomerApp])
 
   return (
     <CartContext.Provider

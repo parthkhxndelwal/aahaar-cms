@@ -542,7 +542,7 @@ export default function VendorInventory({ params }: { params: Promise<{ courtId:
             <TrendingUp className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">₹{stats.totalStockValue.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-blue-600">₹{Number(stats.totalStockValue || 0).toFixed(2)}</div>
           </CardContent>
         </Card>
       </div>

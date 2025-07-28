@@ -8,12 +8,16 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from 
 import { useAuth } from "@/contexts/auth-context"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import DummyPaymentGateway from "@/components/app/dummy-payment-gateway"
 
 export default function CartPage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
   const { cart, updateQuantity, removeFromCart, isLoading } = useCart()
   const { user, token } = useAuth()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [showPaymentGateway, setShowPaymentGateway] = useState(false)
+  const [orderData, setOrderData] = useState<any>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
   const router = useRouter()
 
   // Page transition variants
@@ -63,7 +67,63 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
   }
 
   const handleBackNavigation = () => {
-    router.back()
+    router.push(`/app/${courtId}`)
+  }
+
+  const handleCheckout = async () => {
+    if (!user || !token) return
+
+    setCheckoutLoading(true)
+    try {
+      const response = await fetch(`/api/app/${courtId}/checkout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          paymentMethod: "online",
+          specialInstructions: "",
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setOrderData(data.data)
+          setShowPaymentGateway(true)
+        } else {
+          console.error("Checkout failed:", data.message)
+        }
+      } else {
+        console.error("Checkout request failed:", response.status)
+      }
+    } catch (error) {
+      console.error("Checkout error:", error)
+    } finally {
+      setCheckoutLoading(false)
+    }
+  }
+
+  const handlePaymentComplete = (paymentResult: any) => {
+    // Payment completed, will be redirected by the payment gateway
+    setShowPaymentGateway(false)
+  }
+
+  const handlePaymentCancel = () => {
+    setShowPaymentGateway(false)
+  }
+
+  if (showPaymentGateway && orderData) {
+    return (
+      <DummyPaymentGateway
+        amount={orderData.totalAmount}
+        orderData={orderData}
+        courtId={courtId}
+        onPaymentComplete={handlePaymentComplete}
+        onCancel={handlePaymentCancel}
+      />
+    )
   }
 
   if (cart.items.length === 0) {
@@ -254,8 +314,8 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
                     </motion.div>
 
                     <div className="text-right flex-shrink-0 ml-2">
-                      <p className="font-semibold text-neutral-900 dark:text-white text-sm">₹{item.subtotal.toFixed(2)}</p>
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400">₹{item.price.toFixed(2)} each</p>
+                      <p className="font-semibold text-neutral-900 dark:text-white text-sm">₹{Number(item.subtotal || 0).toFixed(2)}</p>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400">₹{Number(item.price || 0).toFixed(2)} each</p>
                     </div>
                   </div>
                 </div>
@@ -281,7 +341,7 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
             >
               <span className="font-medium">To Pay</span>
               <div className="w-auto flex flex-row gap-2 font-bold">
-                ₹{totalAmount.toFixed(2)}
+                ₹{Number(totalAmount || 0).toFixed(2)}
                 <motion.div
                 animate={{ x: [0, 5, 0] }}
                 transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
@@ -309,7 +369,7 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
                   transition={{ delay: 0.1 }}
                 >
                   <span className="text-neutral-600 dark:text-neutral-400">Item Total</span>
-                  <span className="font-medium text-neutral-900 dark:text-white">₹{itemTotal.toFixed(2)}</span>
+                  <span className="font-medium text-neutral-900 dark:text-white">₹{Number(itemTotal || 0).toFixed(2)}</span>
                 </motion.div>
                 <motion.div 
                   className="flex justify-between"
@@ -318,7 +378,7 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
                   transition={{ delay: 0.15 }}
                 >
                   <span className="text-neutral-600 dark:text-neutral-400">GST (18%)</span>
-                  <span className="font-medium text-neutral-900 dark:text-white">₹{gst.toFixed(2)}</span>
+                  <span className="font-medium text-neutral-900 dark:text-white">₹{Number(gst || 0).toFixed(2)}</span>
                 </motion.div>
                 <motion.div 
                   className="flex justify-between"
@@ -404,12 +464,10 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
         >
           <Button
             className="w-full bg-neutral-600 hover:bg-neutral-700 dark:bg-neutral-100 dark:hover:bg-neutral-50 text-white dark:text-black font-medium py-3 transition-colors"
-            onClick={() => {
-              // Placeholder for checkout functionality
-              console.log("Proceed to checkout clicked - not implemented yet")
-            }}
+            onClick={handleCheckout}
+            disabled={checkoutLoading}
           >
-            Proceed to Checkout
+            {checkoutLoading ? "Processing..." : "Proceed to Checkout"}
           </Button>
         </motion.div>
       </motion.div>

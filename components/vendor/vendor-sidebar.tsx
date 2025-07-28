@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Home, Package, Menu, Settings, ChevronLeft, ChevronRight, Plus, LogOut } from "lucide-react"
+import { Home, Package, Menu, Settings, ChevronLeft, ChevronRight, Plus, LogOut, Clock } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
 interface VendorSidebarProps {
@@ -23,6 +23,11 @@ export function VendorSidebar({ courtId }: VendorSidebarProps) {
       name: "Home",
       href: `/vendor/${courtId}`,
       icon: Home,
+    },
+    {
+      name: "Queue",
+      href: `/vendor/${courtId}/queue`,
+      icon: Clock,
     },
     {
       name: "Inventory",
