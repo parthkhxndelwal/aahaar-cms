@@ -5,16 +5,39 @@ import { ArrowLeft, Clock, MapPin, Eye, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useAuth } from "@/contexts/auth-context"
+import { useAppAuth } from "@/contexts/app-auth-context"
 import { useRouter } from "next/navigation"
+import { useUserOrders } from "@/hooks/use-user-orders"
 
 export default function OrdersPage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
-  const { user, token } = useAuth()
+  const { user, token, loading: authLoading } = useAppAuth()
   const router = useRouter()
-  const [orderSummaries, setOrderSummaries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [activeOrderIds, setActiveOrderIds] = useState<string[]>([])
+
+  // Use the socket hook for real-time updates
+  const { 
+    orderSummaries: socketOrderSummaries, 
+    lastUpdate, 
+    updateOrderSummaries,
+    getActiveOrderIds,
+    isConnected: socketConnected,
+    connectionError: socketError 
+  } = useUserOrders(user?.id || null, activeOrderIds)
+
+  // Use socket data as primary source
+  const orderSummaries = socketOrderSummaries
+
+  // Update active order IDs when order summaries change
+  useEffect(() => {
+    const newActiveOrderIds = orderSummaries
+      .filter(summary => !['completed', 'rejected'].includes(summary.overallStatus))
+      .map(summary => summary.parentOrderId)
+    
+    setActiveOrderIds(newActiveOrderIds)
+  }, [orderSummaries])
 
   const pageVariants = {
     initial: { opacity: 0, x: 20 },
@@ -29,13 +52,26 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
   }
 
   useEffect(() => {
+    // Wait for auth context to finish loading
+    if (authLoading) return
+    
     if (!user || !token) {
+      console.log('🚪 [UserOrders] No auth, redirecting to login')
       router.push(`/app/${courtId}/login`)
       return
     }
 
+    console.log('✅ [UserOrders] Auth confirmed, fetching orders')
     fetchOrders()
-  }, [user, token, courtId])
+  }, [user, token, courtId, authLoading])
+
+  // Debug effect to track socket connection and updates
+  useEffect(() => {
+    console.log(`🔍 [UserOrders] Debug - userId: "${user?.id}", socketConnected: ${socketConnected}, hasOrders: ${orderSummaries.length}`)
+    if (lastUpdate) {
+      console.log(`⏰ [UserOrders] Last update: ${lastUpdate.toLocaleTimeString()}`)
+    }
+  }, [user?.id, socketConnected, orderSummaries.length, lastUpdate])
 
   const fetchOrders = async (isRefresh = false) => {
     if (isRefresh) {
@@ -53,8 +89,13 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
 
       if (response.ok) {
         const data = await response.json()
-        if (data.success) {
-          setOrderSummaries(data.data.orderSummaries)
+        if (data.success && updateOrderSummaries) {
+          // Update socket hook state with fetched data
+          updateOrderSummaries(data.data.orderSummaries)
+          console.log('📊 [UserOrders] Initial orders fetched and updated in socket hook:', {
+            count: data.data.orderSummaries.length,
+            socketConnected
+          })
         }
       }
     } catch (error) {
@@ -89,7 +130,7 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
     router.push(`/app/${courtId}/orders/${parentOrderId}`)
   }
 
-  if (loading) {
+  if (authLoading || (loading && !orderSummaries.length)) {
     return (
       <motion.div 
         className="h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center"
@@ -101,7 +142,19 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
       >
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neutral-900 dark:border-white mx-auto mb-4"></div>
-          <p className="text-neutral-600 dark:text-neutral-400">Loading your orders...</p>
+          <p className="text-neutral-600 dark:text-neutral-400">
+            {authLoading ? "Checking authentication..." : "Loading your orders..."}
+          </p>
+          {user?.id && (
+            <p className="text-xs text-neutral-500 mt-2">
+              Socket: {socketConnected ? '🟢 Connected' : '🔴 Disconnected'} | User: {user.id}
+            </p>
+          )}
+          {socketError && (
+            <p className="text-xs text-red-500 mt-1">
+              Socket Error: {socketError}
+            </p>
+          )}
         </div>
       </motion.div>
     )
@@ -138,6 +191,13 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
                 {orderSummaries.length} orders found
               </p>
+              {/* Socket Debug Info */}
+              <div className="text-xs text-neutral-500 mt-1 flex items-center gap-4">
+                <span>Socket: {socketConnected ? '🟢 Connected' : '🔴 Disconnected'}</span>
+                {user?.id && <span>User: {user.id}</span>}
+                {lastUpdate && <span>Last Update: {lastUpdate.toLocaleTimeString()}</span>}
+                {socketError && <span className="text-red-500">Error: {socketError}</span>}
+              </div>
             </div>
           </div>
           <motion.button

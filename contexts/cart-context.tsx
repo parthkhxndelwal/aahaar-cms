@@ -1,6 +1,6 @@
 "use client"
 import { createContext, useContext, useEffect, useState, ReactNode } from "react"
-import { useAuth } from "./auth-context"
+import { useAppAuth } from "./app-auth-context"
 import { usePathname } from "next/navigation"
 
 interface CartItem {
@@ -34,7 +34,7 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const { user, token } = useAuth()
+  const { user, token } = useAppAuth()
   const pathname = usePathname()
   const [cart, setCart] = useState<Cart>({ items: [], total: 0 })
   const [isLoading, setIsLoading] = useState(false)

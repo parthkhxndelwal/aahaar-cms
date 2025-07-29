@@ -17,9 +17,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useAuth } from "@/contexts/auth-context"
+import { useAppAuth } from "@/contexts/app-auth-context"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
+import { useOrderDetails } from "@/hooks/use-order-details"
 
 interface OrderItem {
   id: string
@@ -76,12 +77,24 @@ export default function OrderDetailsPage({
   params: Promise<{ courtId: string; parentOrderId: string }>
 }) {
   const { courtId, parentOrderId } = use(params)
-  const { user, token } = useAuth()
+  const { user, token, loading: authLoading } = useAppAuth()
   const router = useRouter()
-  const [orderDetails, setOrderDetails] = useState<OrderDetailsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [otpCopied, setOtpCopied] = useState(false)
+
+  // Use the socket hook for real-time updates
+  const { 
+    orderDetails: socketOrderDetails, 
+    lastUpdate, 
+    statusUpdates,
+    updateOrderDetails,
+    isConnected: socketConnected,
+    connectionError: socketError 
+  } = useOrderDetails(user?.id || null, parentOrderId)
+
+  // Use socket data as primary source
+  const orderDetails = socketOrderDetails
 
   const pageVariants = {
     initial: { opacity: 0, x: 20 },
@@ -96,13 +109,29 @@ export default function OrderDetailsPage({
   }
 
   useEffect(() => {
+    // Wait for auth context to finish loading
+    if (authLoading) return
+    
     if (!user || !token || !parentOrderId) {
+      console.log('🚪 [OrderDetails] No auth, redirecting to login')
       router.push(`/app/${courtId}/login`)
       return
     }
 
+    console.log('✅ [OrderDetails] Auth confirmed, fetching order details')
     fetchOrderDetails()
-  }, [user, token, parentOrderId, courtId])
+  }, [user, token, parentOrderId, courtId, authLoading])
+
+  // Debug effect to track socket connection and updates
+  useEffect(() => {
+    console.log(`🔍 [OrderDetails] Debug - userId: "${user?.id}", parentOrderId: "${parentOrderId}", socketConnected: ${socketConnected}`)
+    if (lastUpdate) {
+      console.log(`⏰ [OrderDetails] Last update: ${lastUpdate.toLocaleTimeString()}`)
+    }
+    if (statusUpdates.length > 0) {
+      console.log(`📊 [OrderDetails] Status updates count: ${statusUpdates.length}`)
+    }
+  }, [user?.id, parentOrderId, socketConnected, lastUpdate, statusUpdates.length])
 
   const fetchOrderDetails = async (isRefresh = false) => {
     if (isRefresh) {
@@ -123,8 +152,14 @@ export default function OrderDetailsPage({
 
       if (response.ok) {
         const data = await response.json()
-        if (data.success) {
-          setOrderDetails(data.data)
+        if (data.success && updateOrderDetails) {
+          // Update socket hook state with fetched data
+          updateOrderDetails(data.data)
+          console.log('📊 [OrderDetails] Initial order details fetched and updated in socket hook:', {
+            parentOrderId: data.data.parentOrderId,
+            vendorsCount: data.data.summary.totalVendors,
+            socketConnected
+          })
         }
       }
     } catch (error) {
@@ -197,7 +232,7 @@ export default function OrderDetailsPage({
     return "Waiting for vendor confirmation"
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <motion.div 
         className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center"
@@ -209,7 +244,19 @@ export default function OrderDetailsPage({
       >
         <div className="text-center">
           <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <div>Loading order details...</div>
+          <div>
+            {authLoading ? "Checking authentication..." : "Loading order details..."}
+          </div>
+          {user?.id && parentOrderId && (
+            <p className="text-xs text-neutral-500 mt-2">
+              Socket: {socketConnected ? '🟢 Connected' : '🔴 Disconnected'} | User: {user.id} | Order: {parentOrderId}
+            </p>
+          )}
+          {socketError && (
+            <p className="text-xs text-red-500 mt-1">
+              Socket Error: {socketError}
+            </p>
+          )}
         </div>
       </motion.div>
     )
@@ -263,8 +310,17 @@ export default function OrderDetailsPage({
             <div>
               <h1 className="text-xl font-semibold text-neutral-900 dark:text-white">Order Details</h1>
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                {getOverallStatus(orderDetails.orders)}
+                {getOverallStatus(orderDetails?.orders || [])}
               </p>
+              {/* Socket Debug Info */}
+              <div className="text-xs text-neutral-500 mt-1 flex items-center gap-4">
+                <span>Socket: {socketConnected ? '🟢 Connected' : '🔴 Disconnected'}</span>
+                {user?.id && <span>User: {user.id}</span>}
+                {parentOrderId && <span>Order: {parentOrderId}</span>}
+                {lastUpdate && <span>Last Update: {lastUpdate.toLocaleTimeString()}</span>}
+                {statusUpdates.length > 0 && <span>Updates: {statusUpdates.length}</span>}
+                {socketError && <span className="text-red-500">Error: {socketError}</span>}
+              </div>
             </div>
           </div>
           <motion.button

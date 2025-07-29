@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Minus, Trash2, ArrowRight, MapPin, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer"
-import { useAuth } from "@/contexts/auth-context"
+import { useAppAuth } from "@/contexts/app-auth-context"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import DummyPaymentGateway from "@/components/app/dummy-payment-gateway"
@@ -13,7 +13,7 @@ import DummyPaymentGateway from "@/components/app/dummy-payment-gateway"
 export default function CartPage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
   const { cart, updateQuantity, removeFromCart, isLoading } = useCart()
-  const { user, token } = useAuth()
+  const { user, token } = useAppAuth()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [showPaymentGateway, setShowPaymentGateway] = useState(false)
   const [orderData, setOrderData] = useState<any>(null)

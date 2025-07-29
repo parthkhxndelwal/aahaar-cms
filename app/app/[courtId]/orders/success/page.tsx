@@ -5,8 +5,9 @@ import { Check, Clock, MapPin, Copy, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useAuth } from "@/contexts/auth-context"
+import { useAppAuth } from "@/contexts/app-auth-context"
 import { useRouter } from "next/navigation"
+import { useOrderDetails } from "@/hooks/use-order-details"
 
 export default function OrderSuccessPage({ 
   params, 
@@ -17,11 +18,23 @@ export default function OrderSuccessPage({
 }) {
   const { courtId } = use(params)
   const { parentOrderId, otp } = use(searchParams)
-  const { user, token } = useAuth()
+  const { user, token, loading: authLoading } = useAppAuth()
   const router = useRouter()
-  const [orderDetails, setOrderDetails] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [otpCopied, setOtpCopied] = useState(false)
+
+  // Use the socket hook for real-time updates
+  const { 
+    orderDetails: socketOrderDetails, 
+    lastUpdate, 
+    statusUpdates,
+    updateOrderDetails,
+    isConnected: socketConnected,
+    connectionError: socketError 
+  } = useOrderDetails(user?.id || null, parentOrderId || null)
+
+  // Use socket data as primary source
+  const orderDetails = socketOrderDetails
 
   const pageVariants = {
     initial: { opacity: 0, y: 20 },
@@ -36,13 +49,29 @@ export default function OrderSuccessPage({
   }
 
   useEffect(() => {
+    // Wait for auth context to finish loading
+    if (authLoading) return
+    
     if (!user || !token || !parentOrderId) {
+      console.log('🚪 [OrderSuccess] No auth, redirecting to login')
       router.push(`/app/${courtId}/login`)
       return
     }
 
+    console.log('✅ [OrderSuccess] Auth confirmed, fetching order details')
     fetchOrderDetails()
-  }, [user, token, parentOrderId, courtId])
+  }, [user, token, parentOrderId, courtId, authLoading])
+
+  // Debug effect to track socket connection and updates
+  useEffect(() => {
+    console.log(`🔍 [OrderSuccess] Debug - userId: "${user?.id}", parentOrderId: "${parentOrderId}", socketConnected: ${socketConnected}`)
+    if (lastUpdate) {
+      console.log(`⏰ [OrderSuccess] Last update: ${lastUpdate.toLocaleTimeString()}`)
+    }
+    if (statusUpdates.length > 0) {
+      console.log(`📊 [OrderSuccess] Status updates count: ${statusUpdates.length}`)
+    }
+  }, [user?.id, parentOrderId, socketConnected, lastUpdate, statusUpdates.length])
 
   const fetchOrderDetails = async () => {
     try {
@@ -57,8 +86,14 @@ export default function OrderSuccessPage({
 
       if (response.ok) {
         const data = await response.json()
-        if (data.success) {
-          setOrderDetails(data.data)
+        if (data.success && updateOrderDetails) {
+          // Update socket hook state with fetched data
+          updateOrderDetails(data.data)
+          console.log('📊 [OrderSuccess] Initial order details fetched and updated in socket hook:', {
+            parentOrderId: data.data.parentOrderId,
+            vendorsCount: data.data.summary.totalVendors,
+            socketConnected
+          })
         }
       }
     } catch (error) {
@@ -100,7 +135,7 @@ export default function OrderSuccessPage({
     }
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <motion.div 
         className="h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center"
@@ -112,7 +147,19 @@ export default function OrderSuccessPage({
       >
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neutral-900 dark:border-white mx-auto mb-4"></div>
-          <p className="text-neutral-600 dark:text-neutral-400">Loading order details...</p>
+          <p className="text-neutral-600 dark:text-neutral-400">
+            {authLoading ? "Checking authentication..." : "Loading order details..."}
+          </p>
+          {user?.id && parentOrderId && (
+            <p className="text-xs text-neutral-500 mt-2">
+              Socket: {socketConnected ? '🟢 Connected' : '🔴 Disconnected'} | User: {user.id} | Order: {parentOrderId}
+            </p>
+          )}
+          {socketError && (
+            <p className="text-xs text-red-500 mt-1">
+              Socket Error: {socketError}
+            </p>
+          )}
         </div>
       </motion.div>
     )
@@ -143,7 +190,18 @@ export default function OrderSuccessPage({
           >
             <ArrowLeft className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
           </motion.button>
-          <h1 className="text-xl font-semibold text-neutral-900 dark:text-white">Order Confirmed</h1>
+          <div>
+            <h1 className="text-xl font-semibold text-neutral-900 dark:text-white">Order Confirmed</h1>
+            {/* Socket Debug Info */}
+            <div className="text-xs text-neutral-500 mt-1 flex items-center gap-4">
+              <span>Socket: {socketConnected ? '🟢 Connected' : '🔴 Disconnected'}</span>
+              {user?.id && <span>User: {user.id}</span>}
+              {parentOrderId && <span>Order: {parentOrderId}</span>}
+              {lastUpdate && <span>Last Update: {lastUpdate.toLocaleTimeString()}</span>}
+              {statusUpdates.length > 0 && <span>Updates: {statusUpdates.length}</span>}
+              {socketError && <span className="text-red-500">Error: {socketError}</span>}
+            </div>
+          </div>
         </div>
       </motion.div>
 
@@ -165,6 +223,17 @@ export default function OrderSuccessPage({
           </motion.div>
           <h2 className="text-2xl font-bold text-neutral-900 dark:text-white mb-2">Order Placed Successfully!</h2>
           <p className="text-neutral-600 dark:text-neutral-400">Your order has been split across vendors</p>
+          {/* Real-time status indicator */}
+          {lastUpdate && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-2 text-xs text-neutral-500 flex items-center justify-center gap-2"
+            >
+              <div className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span>Live updates • Last: {lastUpdate.toLocaleTimeString()}</span>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* OTP Display */}
@@ -247,7 +316,7 @@ export default function OrderSuccessPage({
             {/* Vendor Orders */}
             <div className="space-y-3">
               <h3 className="font-semibold text-neutral-900 dark:text-white">Orders by Vendor</h3>
-              {orderDetails.vendors.map((vendorOrder: any, index: number) => (
+              {(orderDetails?.orders || []).map((vendorOrder: any, index: number) => (
                 <motion.div
                   key={vendorOrder.id}
                   initial={{ opacity: 0, x: -20 }}
@@ -265,9 +334,16 @@ export default function OrderSuccessPage({
                             {vendorOrder.items.length} items • ₹{Number(vendorOrder.totalAmount || 0).toFixed(2)}
                           </p>
                         </div>
-                        <Badge className={getStatusColor(vendorOrder.status)}>
-                          {getStatusText(vendorOrder.status)}
-                        </Badge>
+                        <motion.div
+                          key={`${vendorOrder.id}-${vendorOrder.status}`}
+                          initial={{ scale: 1 }}
+                          animate={{ scale: [1, 1.1, 1] }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <Badge className={getStatusColor(vendorOrder.status)}>
+                            {getStatusText(vendorOrder.status)}
+                          </Badge>
+                        </motion.div>
                       </div>
                       
                       <div className="space-y-2">

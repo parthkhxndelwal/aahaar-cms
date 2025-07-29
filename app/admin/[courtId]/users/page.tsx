@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { Search, UserPlus, Mail, Phone, MoreVertical, Ban, CheckCircle } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
+import { useAdminAuth } from "@/contexts/admin-auth-context"
 
 interface User {
   id: string
@@ -45,7 +45,7 @@ export default function AdminUsersPage({ params }: { params: Promise<{ courtId: 
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const { toast } = useToast()
-  const { token } = useAuth()
+  const { token } = useAdminAuth()
   const { courtId } = use(params)
 
   useEffect(() => {

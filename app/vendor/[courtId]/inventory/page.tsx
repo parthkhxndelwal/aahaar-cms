@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, use } from "react"
-import { useAuth } from "@/contexts/auth-context"
+import { useVendorAuth } from "@/contexts/vendor-auth-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,7 +44,7 @@ interface InventoryStats {
 }
 
 export default function VendorInventory({ params }: { params: Promise<{ courtId: string }> }) {
-  const { user, token } = useAuth()
+  const { user, token } = useVendorAuth()
   const router = useRouter()
   const { toast } = useToast()
   const { courtId } = use(params)

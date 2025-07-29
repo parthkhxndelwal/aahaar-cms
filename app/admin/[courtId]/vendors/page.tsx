@@ -13,7 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Plus, Search, MoreVertical, Edit, Trash2, Eye, Copy } from "lucide-react"
 import Link from "next/link"
-import { useAuth } from "@/contexts/auth-context"
+import { useAdminAuth } from "@/contexts/admin-auth-context"
 
 interface Vendor {
   id: string
@@ -37,7 +37,7 @@ export default function AdminVendorsPage({ params }: { params: Promise<{ courtId
   const [deletingVendor, setDeletingVendor] = useState<string | null>(null)
   const [selectedVendorCredentials, setSelectedVendorCredentials] = useState<Vendor | null>(null)
   const { toast } = useToast()
-  const { token } = useAuth()
+  const { token } = useAdminAuth()
   const { courtId } = use(params)
 
   useEffect(() => {

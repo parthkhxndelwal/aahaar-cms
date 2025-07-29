@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { Order, OrderItem, User, Vendor, MenuItem, Payment, Cart, CartItem } from "@/models"
 import { authenticateTokenNextJS } from "@/middleware/auth"
 import { Op } from "sequelize"
+import { emitToVendor } from "@/lib/socket"
 
 export async function POST(request, { params }) {
   try {
@@ -171,6 +172,45 @@ export async function POST(request, { params }) {
         items: group.items,
       })
       createdPayments.push(payment)
+
+      // Emit socket event to vendor for new order notification
+      const orderData = {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        items: group.items.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          subtotal: item.subtotal,
+          imageUrl: item.imageUrl
+        })),
+        totalAmount: order.totalAmount,
+        status: "pending",
+        estimatedPreparationTime: order.estimatedPreparationTime,
+        orderOtp: order.orderOtp,
+        createdAt: order.createdAt,
+      }
+
+      // Get updated section counts for the vendor
+      const upcomingCount = await Order.count({ where: { vendorId, status: "pending" } })
+      const queueCount = await Order.count({ where: { vendorId, status: { [Op.in]: ["accepted", "preparing"] } } })
+      const readyCount = await Order.count({ where: { vendorId, status: "ready" } })
+
+      // Emit new order to vendor
+      emitToVendor(vendorId, 'new-order', {
+        section: 'upcoming',
+        order: orderData,
+        action: 'new_order',
+        sectionCounts: {
+          upcoming: upcomingCount,
+          queue: queueCount,
+          ready: readyCount,
+        }
+      })
+
+      console.log(`📡 Socket event emitted for new order: ${order.id} to vendor: ${vendorId}`)
     }
 
     // Clear the user's cart after successful order creation

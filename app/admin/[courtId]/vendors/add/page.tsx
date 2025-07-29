@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/contexts/auth-context"
+import { useAdminAuth } from "@/contexts/admin-auth-context"
 import { ArrowLeft, Upload, Store, User, CreditCard, MapPin, Clock, Clipboard } from "lucide-react"
 
 interface VendorFormData {
@@ -56,7 +56,7 @@ interface VendorFormData {
 export default function AddVendorPage({ params }: { params: Promise<{ courtId: string }> }) {
   const router = useRouter()
   const { toast } = useToast()
-  const { token } = useAuth()
+  const { token } = useAdminAuth()
   const { courtId } = use(params)
   
   const [formData, setFormData] = useState<VendorFormData>({

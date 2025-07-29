@@ -19,9 +19,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useAuth } from "@/contexts/auth-context"
+import { useVendorAuth } from "@/contexts/vendor-auth-context"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
+import { useVendorOrders } from "@/hooks/use-vendor-orders"
 
 interface Order {
   id: string
@@ -46,13 +47,10 @@ interface Order {
 
 export default function VendorOrdersPage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
-  const { user, token } = useAuth()
+  const { user, token } = useVendorAuth()
   const router = useRouter()
   
   const [vendorId, setVendorId] = useState<string>("")
-  const [upcomingOrders, setUpcomingOrders] = useState<Order[]>([])
-  const [queueOrders, setQueueOrders] = useState<Order[]>([])
-  const [readyOrders, setReadyOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
@@ -60,7 +58,21 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
   const [rejectionReason, setRejectionReason] = useState("")
   const [otpInput, setOtpInput] = useState("")
   const [actionLoading, setActionLoading] = useState(false)
-  const [sectionCounts, setSectionCounts] = useState({ upcoming: 0, queue: 0, ready: 0 })
+
+  // Use the socket hook for real-time updates
+  const { 
+    orders: socketOrders, 
+    sectionCounts, 
+    lastUpdate, 
+    updateOrdersForSection,
+    isConnected: socketConnected,
+    connectionError: socketError 
+  } = useVendorOrders(vendorId && vendorId.trim() ? vendorId : null)
+
+  // Extract orders from socket hook
+  const upcomingOrders = socketOrders.upcoming
+  const queueOrders = socketOrders.queue
+  const readyOrders = socketOrders.ready
 
   useEffect(() => {
     if (!user || !token) {
@@ -74,12 +86,16 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
 
   useEffect(() => {
     if (vendorId) {
+      // Initial fetch, socket will handle real-time updates after this
+      console.log(`🏪 VendorId available: ${vendorId}, starting initial fetch`)
       fetchOrders()
-      // Set up polling for real-time updates
-      const interval = setInterval(fetchOrders, 5000) // Poll every 5 seconds
-      return () => clearInterval(interval)
     }
   }, [vendorId])
+
+  // Debug effect to track vendorId and socket connection
+  useEffect(() => {
+    console.log(`🔍 Debug - vendorId: "${vendorId}", socketConnected: ${socketConnected}, hasOrders: ${upcomingOrders.length + queueOrders.length + readyOrders.length}`)
+  }, [vendorId, socketConnected, upcomingOrders.length, queueOrders.length, readyOrders.length])
 
   const fetchVendorInfo = async () => {
     try {
@@ -108,7 +124,7 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
     }
 
     try {
-      // Fetch all sections
+      // Initial data fetch - socket will handle updates after this
       const [upcomingRes, queueRes, readyRes] = await Promise.all([
         fetch(`/api/vendors/${vendorId}/queue?section=upcoming`, {
           headers: { Authorization: `Bearer ${token}` }
@@ -127,18 +143,24 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
         readyRes.json()
       ])
 
-      if (upcomingData.success) {
-        setUpcomingOrders(upcomingData.data.orders)
-        setSectionCounts(prev => ({ ...prev, upcoming: upcomingData.data.sectionCounts.upcoming }))
+      // Update socket hook state with fetched data
+      if (upcomingData.success && updateOrdersForSection) {
+        updateOrdersForSection('upcoming', upcomingData.data.orders)
       }
-      if (queueData.success) {
-        setQueueOrders(queueData.data.orders)
-        setSectionCounts(prev => ({ ...prev, queue: queueData.data.sectionCounts.queue }))
+      if (queueData.success && updateOrdersForSection) {
+        updateOrdersForSection('queue', queueData.data.orders)
       }
-      if (readyData.success) {
-        setReadyOrders(readyData.data.orders)
-        setSectionCounts(prev => ({ ...prev, ready: readyData.data.sectionCounts.ready }))
+      if (readyData.success && updateOrdersForSection) {
+        updateOrdersForSection('ready', readyData.data.orders)
       }
+
+      console.log('📊 Initial vendor orders fetched and updated in socket hook:', {
+        upcoming: upcomingData.success ? upcomingData.data.orders.length : 0,
+        queue: queueData.success ? queueData.data.orders.length : 0,
+        ready: readyData.success ? readyData.data.orders.length : 0,
+        socketConnected
+      })
+
     } catch (error) {
       console.error("Error fetching orders:", error)
     } finally {
@@ -337,6 +359,11 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neutral-900 dark:border-white mx-auto mb-4"></div>
           <p className="text-neutral-600 dark:text-neutral-400">Loading orders...</p>
+          {vendorId && (
+            <p className="text-xs text-neutral-500 mt-2">
+              Socket: {socketConnected ? '🟢 Connected' : '🔴 Disconnected'} | Vendor: {vendorId}
+            </p>
+          )}
         </div>
       </div>
     )
@@ -352,6 +379,13 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               Manage your incoming orders
             </p>
+            {/* Socket Debug Info */}
+            <div className="text-xs text-neutral-500 mt-1 flex items-center gap-4">
+              <span>Socket: {socketConnected ? '🟢 Connected' : '🔴 Disconnected'}</span>
+              {vendorId && <span>Vendor: {vendorId}</span>}
+              {lastUpdate && <span>Last Update: {lastUpdate.toLocaleTimeString()}</span>}
+              {socketError && <span className="text-red-500">Error: {socketError}</span>}
+            </div>
           </div>
           <Button
             variant="outline"

@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { use } from "react"
-import { useAuth } from "@/contexts/auth-context"
+import { useAdminAuth } from "@/contexts/admin-auth-context"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { AdminSidebar } from "@/components/admin/admin-sidebar"
@@ -15,7 +15,7 @@ export default function AdminLayout({
   children: React.ReactNode
   params: Promise<{ courtId: string }>
 }) {
-  const { user, loading } = useAuth()
+  const { user, loading } = useAdminAuth()
   const router = useRouter()
   const { courtId } = use(params)
 

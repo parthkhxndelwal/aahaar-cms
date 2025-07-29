@@ -9,13 +9,13 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Phone, Mail, ArrowLeft, Building2 } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
+import { useAppAuth } from "@/contexts/app-auth-context"
 import { api } from "@/lib/api"
 
 export default function UserLogin() {
   const params = useParams()
   const router = useRouter()
-  const { login, user, token } = useAuth()
+  const { login, user, token } = useAppAuth()
   const courtId = params.courtId as string
 
   // Get return URL from query parameters

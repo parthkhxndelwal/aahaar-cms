@@ -23,9 +23,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useAuth } from "@/contexts/auth-context"
+import { useVendorAuth } from "@/contexts/vendor-auth-context"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
+import { useVendorOrders } from "@/hooks/use-vendor-orders"
 
 interface OrderItem {
   name: string
@@ -67,7 +68,7 @@ interface QueueData {
 
 export default function VendorQueuePage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
-  const { user, token } = useAuth()
+  const { user, token } = useVendorAuth()
   const router = useRouter()
   
   const [vendorId, setVendorId] = useState<string>("")

@@ -3,11 +3,11 @@ import { use } from "react"
 import Link from "next/link"
 import { ArrowLeft, User, Lock, Bell, HelpCircle, Info, ChevronRight, LogOut } from "lucide-react"
 import { motion } from "framer-motion"
-import { useAuth } from "@/contexts/auth-context"
+import { useAppAuth } from "@/contexts/app-auth-context"
 
 export default function AccountSettingsPage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
-  const { logout } = useAuth()
+  const { logout } = useAppAuth()
 
   const accountOptions = [
     {

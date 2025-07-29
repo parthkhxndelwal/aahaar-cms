@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { Order, User, Payment, OrderItem, MenuItem, Vendor } from "@/models"
 import { authenticateToken } from "@/middleware/auth"
 import { Op } from "sequelize"
+import { emitToVendor, emitToUser, emitToOrder } from "@/lib/socket"
 
 export async function GET(request, { params }) {
   try {
@@ -234,6 +235,59 @@ export async function PATCH(request, { params }) {
         ],
       })
 
+      // Get updated section counts for the vendor
+      const sectionCounts = await Promise.all([
+        Order.count({ where: { vendorId, status: "pending" } }),
+        Order.count({ where: { vendorId, status: { [Op.in]: ["accepted", "preparing"] } } }),
+        Order.count({ where: { vendorId, status: "ready" } }),
+      ])
+
+      // Emit socket event to vendor for real-time update
+      const updatedOrder = {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        items: order.items,
+        totalAmount: order.totalAmount,
+        status: "accepted",
+        estimatedPreparationTime: order.estimatedPreparationTime,
+        queuePosition,
+        orderOtp: order.orderOtp,
+        createdAt: order.createdAt,
+        acceptedAt: new Date(),
+      }
+
+      // Notify vendor of order status update
+      emitToVendor(vendorId, 'order-status-updated', {
+        section: 'queue',
+        order: updatedOrder,
+        action: 'status_update',
+        sectionCounts: {
+          upcoming: sectionCounts[0],
+          queue: sectionCounts[1],
+          ready: sectionCounts[2],
+        }
+      })
+
+      // Notify user of order acceptance
+      if (order.userId) {
+        emitToUser(order.userId, 'order-status-updated', {
+          parentOrderId: order.parentOrderId,
+          vendorOrder: updatedOrder,
+          action: 'status_update'
+        })
+      }
+
+      // Also emit to the specific order room
+      emitToOrder(order.parentOrderId, 'order-status-updated', {
+        parentOrderId: order.parentOrderId,
+        vendorOrder: updatedOrder,
+        action: 'status_update'
+      })
+
+      console.log(`📡 Socket events emitted for order acceptance: ${order.id}`)
+
       return NextResponse.json({
         success: true,
         message: "Order accepted successfully",
@@ -264,6 +318,57 @@ export async function PATCH(request, { params }) {
           },
         ],
       })
+
+      // Get updated section counts for the vendor
+      const sectionCounts = await Promise.all([
+        Order.count({ where: { vendorId, status: "pending" } }),
+        Order.count({ where: { vendorId, status: { [Op.in]: ["accepted", "preparing"] } } }),
+        Order.count({ where: { vendorId, status: "ready" } }),
+      ])
+
+      // Emit socket event to vendor to remove order from upcoming
+      emitToVendor(vendorId, 'order-removed', {
+        orderId: order.id,
+        sectionCounts: {
+          upcoming: sectionCounts[0],
+          queue: sectionCounts[1],
+          ready: sectionCounts[2],
+        }
+      })
+
+      // Notify user of order rejection
+      if (order.userId) {
+        const rejectedOrder = {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          items: order.items,
+          totalAmount: order.totalAmount,
+          status: "rejected",
+          estimatedPreparationTime: order.estimatedPreparationTime,
+          queuePosition: null,
+          orderOtp: order.orderOtp,
+          createdAt: order.createdAt,
+          rejectedAt: new Date(),
+          rejectionReason: reason || "No reason provided",
+        }
+
+        emitToUser(order.userId, 'order-status-updated', {
+          parentOrderId: order.parentOrderId,
+          vendorOrder: rejectedOrder,
+          action: 'status_update'
+        })
+
+        // Also emit to the specific order room
+        emitToOrder(order.parentOrderId, 'order-status-updated', {
+          parentOrderId: order.parentOrderId,
+          vendorOrder: rejectedOrder,
+          action: 'status_update'
+        })
+      }
+
+      console.log(`📡 Socket events emitted for order rejection: ${order.id}`)
 
       // TODO: Process refund credits to user
       // TODO: Send notification to user about rejection and refund

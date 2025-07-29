@@ -1,6 +1,7 @@
 "use client"
 import { use, useEffect, useState } from "react"
-import { useAuth } from "@/contexts/auth-context"
+import { useAppAuth } from "@/contexts/app-auth-context"
+import { useRouter } from "next/navigation"
 import { ProductCard } from "@/components/app/product-card"
 import { Bell } from "lucide-react"
 import { motion } from "framer-motion"
@@ -22,11 +23,27 @@ interface MenuItem {
 
 export default function HomePage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
-  const { user } = useAuth()
+  const { user, token, loading: authLoading } = useAppAuth()
+  const router = useRouter()
   const [hotItems, setHotItems] = useState<MenuItem[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Redirect to login if not authenticated
   useEffect(() => {
+    // Wait for auth context to finish loading
+    if (authLoading) return
+    
+    if (!user || !token) {
+      console.log('🚪 [HomePage] No auth, redirecting to login')
+      router.push(`/app/${courtId}/login`)
+      return
+    }
+  }, [user, token, courtId, router, authLoading])
+
+  useEffect(() => {
+    if (!user || !token || authLoading) return
+    
+    console.log('✅ [HomePage] Auth confirmed, fetching hot items')
     const fetchHotItems = async () => {
       try {
         const response = await fetch(`/api/courts/${courtId}/hot-items`)
@@ -43,7 +60,21 @@ export default function HomePage({ params }: { params: Promise<{ courtId: string
     }
 
     fetchHotItems()
-  }, [courtId])
+  }, [courtId, user, token, authLoading])
+
+  // Show loading while checking authentication or fetching data
+  if (authLoading || (!user || !token)) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 mx-auto mb-4"></div>
+          <p className="text-neutral-600 dark:text-neutral-400">
+            {authLoading ? "Checking authentication..." : "Loading..."}
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 pb-24">

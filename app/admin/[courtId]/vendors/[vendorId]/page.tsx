@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { ArrowLeft, Save, Upload, MapPin, Clock, DollarSign, Settings, User } from "lucide-react"
 import Link from "next/link"
-import { useAuth } from "@/contexts/auth-context"
+import { useAdminAuth } from "@/contexts/admin-auth-context"
 
 interface Vendor {
   id: string
@@ -64,7 +64,7 @@ export default function VendorEditPage({
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const { toast } = useToast()
-  const { token } = useAuth()
+  const { token } = useAdminAuth()
   const { courtId, vendorId } = use(params)
   const { mode } = use(searchParams)
   const [editMode, setEditMode] = useState(mode !== "view")
