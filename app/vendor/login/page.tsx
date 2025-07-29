@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, ChefHat, ArrowLeft } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { api } from "@/lib/api"
 
 export default function VendorLogin() {
   const router = useRouter()
@@ -46,7 +45,13 @@ export default function VendorLogin() {
     try {
       console.log("🚀 Attempting login with:", { email, courtId, hasPassword: !!password })
       
-      const response = await api.login(email, password, courtId)
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password, courtId }),
+      }).then(res => res.json())
 
       console.log("📥 Login response:", response)
 
@@ -88,11 +93,17 @@ export default function VendorLogin() {
         hasPassword: !!testVendorCredentials.password 
       })
       
-      const response = await api.login(
-        testVendorCredentials.email, 
-        testVendorCredentials.password, 
-        testVendorCredentials.courtId
-      )
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: testVendorCredentials.email,
+          password: testVendorCredentials.password,
+          courtId: testVendorCredentials.courtId,
+        }),
+      }).then(res => res.json())
 
       console.log("📥 Test vendor login response:", response)
 
