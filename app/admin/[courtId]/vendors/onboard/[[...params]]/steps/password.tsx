@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
 
 interface PasswordStepProps {
   vendorData: any
@@ -269,7 +270,7 @@ export default function PasswordStep({
           disabled={loading || passwordStrength.score < 4}
           className="gap-2"
         >
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {loading && <Spinner size={16} variant="white" />}
           Next Step
         </Button>
       </div>

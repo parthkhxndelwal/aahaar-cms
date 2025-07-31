@@ -34,7 +34,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         validate: {
-          len: [2, 200],
+          customStallLocation(value) {
+            // Allow null or empty string, but validate length if provided
+            if (value && value.trim() !== "") {
+              if (value.length < 2 || value.length > 200) {
+                throw new Error("Stall location must be between 2 and 200 characters");
+              }
+            }
+          },
         },
       },
       vendorName: {
@@ -165,7 +172,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          is: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+          customPan(value) {
+            // Allow empty string during onboarding, but validate format if provided
+            if (value && value.trim() !== "") {
+              if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value)) {
+                throw new Error("Invalid PAN format. Expected format: AAAAA9999A");
+              }
+            }
+          },
         },
         comment: "PAN number for tax compliance",
       },

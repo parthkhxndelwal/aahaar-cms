@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { Loader2, AlertCircle, Clock } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
 
 interface OperatingHoursStepProps {
   vendorData: any
@@ -282,7 +283,7 @@ export default function OperatingHoursStep({
           disabled={loading}
           className="gap-2"
         >
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {loading && <Spinner size={16} variant="white" />}
           Next Step
         </Button>
       </div>

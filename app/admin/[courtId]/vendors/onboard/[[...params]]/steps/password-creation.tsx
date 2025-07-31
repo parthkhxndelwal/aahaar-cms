@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, AlertCircle, Eye, EyeOff, Shield, CheckCircle, X } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
 
 interface PasswordCreationStepProps {
   vendorData: any
@@ -288,7 +289,7 @@ export default function PasswordCreationStep({
           disabled={loading || !isPasswordValid() || formData.password !== formData.confirmPassword}
           className="gap-2"
         >
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {loading && <Spinner size={16} variant="white" />}
           Create Account
         </Button>
       </div>

@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle, Plus, Search, Store, Users, Clock, Phone, Mail, MapPin, Star, CheckCircle, XCircle } from "lucide-react"
+import { AlertCircle, Plus, Search, Store, Users, Clock, Phone, Mail, MapPin, Star, CheckCircle, XCircle, ArrowRight } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Spinner } from "@/components/ui/spinner"
 import Image from "next/image"
 import Link from "next/link"
 
@@ -27,6 +27,20 @@ interface Vendor {
   totalRatings: number
   logoUrl?: string
   razorpayAccountId?: string
+  userId?: string
+  operatingHours?: any
+  bankAccountNumber?: string
+  bankIfscCode?: string
+  bankAccountHolderName?: string
+  bankName?: string
+  panNumber?: string
+  gstin?: string
+  maxOrdersPerHour?: number
+  averagePreparationTime?: number
+  onboardingStatus?: "not_started" | "in_progress" | "completed"
+  onboardingStep?: string
+  onboardingCompletedAt?: string
+  onboardingStartedAt?: string
   metadata?: {
     onboardingCompleted?: boolean
     onboardingStep?: string
@@ -53,9 +67,9 @@ export default function VendorsPage() {
 
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [loading, setLoading] = useState(true)
+  const [buttonLoading, setButtonLoading] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [onboardedFilter, setOnboardedFilter] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState({
     totalPages: 1,
@@ -64,9 +78,145 @@ export default function VendorsPage() {
     hasPrev: false,
   })
 
+  // Find incomplete onboarding vendor
+  const incompleteOnboardingVendor = vendors.find(vendor => {
+    // Check direct properties first (new structure)
+    if (vendor.onboardingStatus === 'in_progress' && vendor.onboardingStep) {
+      console.log('Found incomplete onboarding vendor (direct props):', vendor.stallName, vendor.onboardingStep)
+      return true
+    }
+    // Fallback to metadata (legacy structure)
+    if (!vendor.metadata?.onboardingCompleted && vendor.metadata?.onboardingStep) {
+      console.log('Found incomplete onboarding vendor (metadata):', vendor.stallName, vendor.metadata.onboardingStep)
+      return true
+    }
+    // Also check if vendor was just created but no razorpay account yet (incomplete onboarding)
+    if (!vendor.razorpayAccountId && vendor.stallName) {
+      console.log('Found incomplete onboarding vendor (no razorpay):', vendor.stallName)
+      return true
+    }
+    return false
+  })
+
+  // Function to get step information for display
+  const getStepInfo = (stepKey: string): { number: number, title: string, total: number } => {
+    const steps = [
+      { key: "basic", number: 1, title: "Basic Details" },
+      { key: "password", number: 2, title: "Password Creation" },
+      { key: "stall", number: 3, title: "Stall Setup" },
+      { key: "hours", number: 4, title: "Operating Hours" },
+      { key: "bank", number: 5, title: "Bank Details" },
+      { key: "legal", number: 6, title: "Legal Compliance" },
+      { key: "account", number: 7, title: "Account Creation" },
+      { key: "config", number: 8, title: "Final Configuration" },
+      { key: "success", number: 9, title: "Complete" }
+    ]
+    
+    const step = steps.find(s => s.key === stepKey) || steps[0]
+    return { number: step.number, title: step.title, total: steps.length }
+  }
+
+  // Function to determine the next step based on vendor data
+  const getNextIncompleteStep = (vendor: Vendor): string => {
+    if (!vendor) return "basic"
+    
+    console.log('=== VENDOR PAGE STEP DETECTION ===')
+    console.log(`Checking vendor: ${vendor.stallName}`)
+    console.log('Vendor data:', {
+      stallName: vendor.stallName,
+      vendorName: vendor.vendorName,
+      contactEmail: vendor.contactEmail,
+      contactPhone: vendor.contactPhone,
+      userId: vendor.userId,
+      logoUrl: vendor.logoUrl,
+      operatingHours: vendor.operatingHours,
+      bankAccountNumber: vendor.bankAccountNumber,
+      bankIfscCode: vendor.bankIfscCode,
+      panNumber: vendor.panNumber,
+      razorpayAccountId: vendor.razorpayAccountId,
+      maxOrdersPerHour: vendor.maxOrdersPerHour,
+      averagePreparationTime: vendor.averagePreparationTime,
+      onboardingStep: vendor.onboardingStep,
+      onboardingStatus: vendor.onboardingStatus
+    })
+    
+    // Define the step order and their completion criteria
+    const stepChecks = [
+      { step: "basic", isComplete: !!(vendor.stallName && vendor.vendorName && vendor.contactEmail && vendor.contactPhone) },
+      { step: "password", isComplete: !!vendor.userId }, // User account created
+      { step: "stall", isComplete: !!vendor.logoUrl }, // Logo uploaded
+      { step: "hours", isComplete: !!vendor.operatingHours }, // Operating hours set
+      { step: "bank", isComplete: !!(vendor.bankAccountNumber && vendor.bankIfscCode) }, // Bank details
+      { step: "legal", isComplete: !!vendor.panNumber }, // PAN number added
+      { step: "account", isComplete: !!vendor.razorpayAccountId }, // Razorpay account created
+      { step: "config", isComplete: !!(vendor.maxOrdersPerHour && vendor.averagePreparationTime) }, // Config set
+      { step: "success", isComplete: vendor.onboardingStatus === 'completed' } // Fully completed
+    ]
+    
+    console.log('Step completion status:')
+    stepChecks.forEach(check => {
+      console.log(`  ${check.step}: ${check.isComplete ? '✅ Complete' : '❌ Incomplete'}`)
+    })
+    
+    // If vendor has onboardingStep field, prefer that over auto-detection for better UX
+    if (vendor.onboardingStep && vendor.onboardingStep !== 'completed') {
+      console.log(`Using onboardingStep field: ${vendor.onboardingStep}`)
+      
+      // Validate that the step indicated by onboardingStep is actually incomplete
+      const stepIndex = stepChecks.findIndex(check => check.step === vendor.onboardingStep)
+      if (stepIndex !== -1 && !stepChecks[stepIndex].isComplete) {
+        console.log(`Confirmed: ${vendor.onboardingStep} is incomplete, using it`)
+        console.log('=== END VENDOR PAGE STEP DETECTION ===')
+        return vendor.onboardingStep
+      } else {
+        console.log(`Warning: onboardingStep ${vendor.onboardingStep} appears complete, falling back to auto-detection`)
+      }
+    }
+    
+    // Find the first incomplete step
+    for (const check of stepChecks) {
+      if (!check.isComplete) {
+        console.log(`Next incomplete step for ${vendor.stallName}: ${check.step}`)
+        console.log('=== END VENDOR PAGE STEP DETECTION ===')
+        return check.step
+      }
+    }
+    
+    // If all steps are complete, go to success
+    console.log('All steps complete, going to success')
+    console.log('=== END VENDOR PAGE STEP DETECTION ===')
+    return "success"
+  }
+
+  // Debug log
+  console.log('All vendors:', vendors.map(v => ({
+    name: v.stallName,
+    onboardingStatus: v.onboardingStatus,
+    onboardingStep: v.onboardingStep,
+    razorpayAccountId: v.razorpayAccountId,
+    metadata: v.metadata
+  })))
+  console.log('Incomplete onboarding vendor:', incompleteOnboardingVendor?.stallName || 'None found')
+
   useEffect(() => {
     fetchVendors()
-  }, [courtId, currentPage, statusFilter, onboardedFilter])
+  }, [courtId, currentPage, statusFilter])
+
+  // Clear button loading state on route change
+  useEffect(() => {
+    const handleRouteChange = () => {
+      setButtonLoading(null)
+    }
+    
+    // Reset loading state after a delay in case navigation fails
+    if (buttonLoading) {
+      const timer = setTimeout(() => {
+        setButtonLoading(null)
+      }, 3000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [buttonLoading])
 
   const fetchVendors = async () => {
     try {
@@ -79,10 +229,6 @@ export default function VendorsPage() {
 
       if (statusFilter && statusFilter !== "all") {
         params.append("status", statusFilter)
-      }
-
-      if (onboardedFilter && onboardedFilter !== "all") {
-        params.append("onboarded", onboardedFilter)
       }
 
       const response = await fetch(`/api/admin/vendors?${params}`)
@@ -105,9 +251,6 @@ export default function VendorsPage() {
     vendor.contactEmail.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const onboardedVendors = filteredVendors.filter(vendor => vendor.metadata?.onboardingCompleted)
-  const pendingVendors = filteredVendors.filter(vendor => !vendor.metadata?.onboardingCompleted)
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
@@ -125,6 +268,9 @@ export default function VendorsPage() {
 
   const VendorCard = ({ vendor }: { vendor: Vendor }) => {
     const isPending = !vendor.metadata?.onboardingCompleted
+    const continueButtonId = `continue-${vendor.id}`
+    const viewButtonId = `view-${vendor.id}`
+    const editButtonId = `edit-${vendor.id}`
     
     return (
       <Card className="hover:shadow-md transition-shadow">
@@ -198,15 +344,28 @@ export default function VendorsPage() {
             <div className="flex items-center justify-between pt-2 border-t">
               <div className="flex items-center gap-2 text-sm text-orange-600">
                 <Clock className="h-4 w-4" />
-                <span>Onboarding Step: {vendor.metadata?.onboardingStep || 1}</span>
+                <span>
+                  {(() => {
+                    const nextStep = getNextIncompleteStep(vendor)
+                    const stepInfo = getStepInfo(nextStep)
+                    return `Step ${stepInfo.number}/${stepInfo.total} - ${stepInfo.title}`
+                  })()}
+                </span>
               </div>
               <Button
                 size="sm"
+                disabled={buttonLoading === continueButtonId}
                 onClick={() => {
-                  const step = vendor.metadata?.onboardingStep || "basic"
-                  router.push(`/admin/${courtId}/vendors/onboard/${step}/${vendor.id}`)
+                  const nextStep = getNextIncompleteStep(vendor)
+                  console.log(`Vendor card: Redirecting to next step ${nextStep} for vendor ${vendor.stallName}`)
+                  setButtonLoading(continueButtonId)
+                  router.push(`/admin/${courtId}/vendors/onboard/${nextStep}/${vendor.id}`)
                 }}
+                className="gap-2"
               >
+                {buttonLoading === continueButtonId ? (
+                  <Spinner size={16} variant="white" />
+                ) : null}
                 Continue Setup
               </Button>
             </div>
@@ -220,15 +379,31 @@ export default function VendorsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => router.push(`/admin/${courtId}/vendors/${vendor.id}`)}
+                  disabled={buttonLoading === viewButtonId}
+                  onClick={() => {
+                    setButtonLoading(viewButtonId)
+                    router.push(`/admin/${courtId}/vendors/${vendor.id}`)
+                  }}
+                  className="gap-2"
                 >
+                  {buttonLoading === viewButtonId ? (
+                    <Spinner size={16} variant="dark" />
+                  ) : null}
                   View Details
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => router.push(`/admin/${courtId}/vendors/${vendor.id}/edit`)}
+                  disabled={buttonLoading === editButtonId}
+                  onClick={() => {
+                    setButtonLoading(editButtonId)
+                    router.push(`/admin/${courtId}/vendors/${vendor.id}/edit`)
+                  }}
+                  className="gap-2"
                 >
+                  {buttonLoading === editButtonId ? (
+                    <Spinner size={16} variant="dark" />
+                  ) : null}
                   Edit
                 </Button>
               </div>
@@ -250,13 +425,52 @@ export default function VendorsPage() {
           </p>
         </div>
         <Button
-          onClick={() => router.push(`/admin/${courtId}/vendors/onboard/basic`)}
+          disabled={buttonLoading === 'header-button'}
+          onClick={() => {
+            setButtonLoading('header-button')
+            if (incompleteOnboardingVendor) {
+              // Continue existing onboarding - go to next incomplete step
+              const nextStep = getNextIncompleteStep(incompleteOnboardingVendor)
+              console.log(`Redirecting to next incomplete step: ${nextStep}`)
+              router.push(`/admin/${courtId}/vendors/onboard/${nextStep}/${incompleteOnboardingVendor.id}`)
+            } else {
+              // Start new onboarding
+              router.push(`/admin/${courtId}/vendors/onboard/basic`)
+            }
+          }}
           className="gap-2"
         >
-          <Plus className="h-4 w-4" />
-          Register New Vendor
+          {buttonLoading === 'header-button' ? (
+            <Spinner size={16} variant="white" />
+          ) : incompleteOnboardingVendor ? (
+            <ArrowRight className="h-4 w-4" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          {incompleteOnboardingVendor 
+            ? `Finish Setting up "${incompleteOnboardingVendor.stallName}"`
+            : "Create New Vendor"
+          }
         </Button>
       </div>
+
+      {/* Incomplete Onboarding Alert */}
+      {incompleteOnboardingVendor && (
+        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertDescription className="text-amber-800 dark:text-amber-200">
+            <strong>Incomplete Onboarding:</strong> You have an unfinished vendor setup for "{incompleteOnboardingVendor.stallName}". 
+            Complete this onboarding before registering a new vendor. 
+            <span className="font-medium ml-1">
+              {(() => {
+                const nextStep = getNextIncompleteStep(incompleteOnboardingVendor)
+                const stepInfo = getStepInfo(nextStep)
+                return `Next: Step ${stepInfo.number}/${stepInfo.total} - ${stepInfo.title}`
+              })()}
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Filters and Search */}
       <Card>
@@ -283,128 +497,56 @@ export default function VendorsPage() {
                 <SelectItem value="suspended">Suspended</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={onboardedFilter} onValueChange={setOnboardedFilter}>
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filter by onboarding" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Vendors</SelectItem>
-                <SelectItem value="true">Fully Onboarded</SelectItem>
-                <SelectItem value="false">Pending Onboarding</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
 
       {/* Vendors List */}
-      <Tabs defaultValue="all" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="all" className="gap-2">
-            <Users className="h-4 w-4" />
-            All Vendors ({filteredVendors.length})
-          </TabsTrigger>
-          <TabsTrigger value="onboarded" className="gap-2">
-            <CheckCircle className="h-4 w-4" />
-            Fully Onboarded ({onboardedVendors.length})
-          </TabsTrigger>
-          <TabsTrigger value="pending" className="gap-2">
-            <Clock className="h-4 w-4" />
-            Pending Onboarding ({pendingVendors.length})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="space-y-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
+      <div className="space-y-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <Spinner size={32} variant="dark" className="mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading vendors...</p>
+            </div>
+          </div>
+        ) : filteredVendors.length === 0 ? (
+          <Card>
+            <CardContent className="py-12">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Loading vendors...</p>
-              </div>
-            </div>
-          ) : filteredVendors.length === 0 ? (
-            <Card>
-              <CardContent className="py-12">
-                <div className="text-center">
-                  <Store className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No vendors found</h3>
-                  <p className="text-muted-foreground mb-4">
-                    {searchTerm || (statusFilter !== "all") || (onboardedFilter !== "all")
-                      ? "No vendors match your current filters."
-                      : "Get started by registering your first vendor."}
-                  </p>
-                  <Button
-                    onClick={() => router.push(`/admin/${courtId}/vendors/onboard/basic`)}
-                    className="gap-2"
-                  >
+                <Store className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No vendors found</h3>
+                <p className="text-muted-foreground mb-4">
+                  {searchTerm || (statusFilter !== "all")
+                    ? "No vendors match your current filters."
+                    : "Get started by registering your first vendor."}
+                </p>
+                <Button
+                  disabled={buttonLoading === 'register-new'}
+                  onClick={() => {
+                    setButtonLoading('register-new')
+                    router.push(`/admin/${courtId}/vendors/onboard/basic`)
+                  }}
+                  className="gap-2"
+                >
+                  {buttonLoading === 'register-new' ? (
+                    <Spinner size={16} variant="white" />
+                  ) : (
                     <Plus className="h-4 w-4" />
-                    Register New Vendor
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4">
-              {filteredVendors.map((vendor) => (
-                <VendorCard key={vendor.id} vendor={vendor} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="onboarded" className="space-y-4">
-          {onboardedVendors.length === 0 ? (
-            <Card>
-              <CardContent className="py-12">
-                <div className="text-center">
-                  <CheckCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No fully onboarded vendors</h3>
-                  <p className="text-muted-foreground">
-                    Vendors will appear here once they complete the full onboarding process.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4">
-              {onboardedVendors.map((vendor) => (
-                <VendorCard key={vendor.id} vendor={vendor} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="pending" className="space-y-4">
-          {pendingVendors.length === 0 ? (
-            <Card>
-              <CardContent className="py-12">
-                <div className="text-center">
-                  <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No pending onboarding</h3>
-                  <p className="text-muted-foreground">
-                    All vendors have completed their onboarding process.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  These vendors have started but not completed their onboarding. 
-                  Click "Continue Setup" to help them complete the process.
-                </AlertDescription>
-              </Alert>
-              <div className="grid gap-4">
-                {pendingVendors.map((vendor) => (
-                  <VendorCard key={vendor.id} vendor={vendor} />
-                ))}
+                  )}
+                  Register New Vendor
+                </Button>
               </div>
-            </>
-          )}
-        </TabsContent>
-      </Tabs>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {filteredVendors.map((vendor) => (
+              <VendorCard key={vendor.id} vendor={vendor} />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { Loader2, CheckCircle, Settings, Clock, ShoppingBag } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
 
 interface FinalConfigurationStepProps {
   vendorData: any
@@ -212,7 +213,7 @@ export default function FinalConfigurationStep({
           disabled={loading}
           className="gap-2 bg-green-600 hover:bg-green-700"
         >
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {loading && <Spinner size={16} variant="white" />}
           Complete Onboarding
         </Button>
       </div>

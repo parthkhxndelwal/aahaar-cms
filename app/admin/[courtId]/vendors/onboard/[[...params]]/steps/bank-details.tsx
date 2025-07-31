@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, AlertCircle, CreditCard, CheckCircle, Building2 } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
 
 interface BankDetailsStepProps {
   vendorData: any
@@ -223,7 +224,7 @@ export default function BankDetailsStep({
               />
               {validatingIfsc && (
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                  <Spinner size={16} variant="dark" />
                 </div>
               )}
               {!validatingIfsc && ifscValid === true && (
@@ -319,7 +320,7 @@ export default function BankDetailsStep({
           disabled={loading || validatingIfsc || !ifscValid}
           className="gap-2"
         >
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {loading && <Spinner size={16} variant="white" />}
           Next Step
         </Button>
       </div>

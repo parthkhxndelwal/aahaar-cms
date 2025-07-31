@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, AlertCircle, FileText, Upload, X, CheckCircle, Info } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
 import Image from "next/image"
 
 interface LegalComplianceStepProps {
@@ -362,7 +363,7 @@ export default function LegalComplianceStep({
                     className="gap-2"
                   >
                     {uploading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Spinner size={16} variant="dark" />
                     ) : (
                       <Upload className="h-4 w-4" />
                     )}
@@ -406,7 +407,7 @@ export default function LegalComplianceStep({
           disabled={loading || uploading}
           className="gap-2"
         >
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {loading && <Spinner size={16} variant="white" />}
           Create Razorpay Account
         </Button>
       </div>

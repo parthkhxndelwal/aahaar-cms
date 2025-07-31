@@ -120,12 +120,15 @@ export async function POST(request) {
       maxOrdersPerHour,
       averagePreparationTime,
       businessType,
+      onboardingStep,
+      onboardingStatus,
     } = body
 
-    // Validate required fields
-    if (!courtId || !stallName || !vendorName || !contactEmail || !contactPhone || !panNumber) {
+    // Validate required fields - PAN number is only required for final completion
+    const basicRequiredFields = !courtId || !stallName || !vendorName || !contactEmail || !contactPhone
+    if (basicRequiredFields) {
       return NextResponse.json(
-        { success: false, message: "Missing required fields" },
+        { success: false, message: "Missing required fields: courtId, stallName, vendorName, contactEmail, contactPhone" },
         { status: 400 }
       )
     }
@@ -177,10 +180,10 @@ export async function POST(request) {
       vendorName,
       contactEmail,
       contactPhone,
-      stallLocation,
-      cuisineType,
-      description,
-      logoUrl,
+      stallLocation: stallLocation || null, // Set to null if not provided (allowNull: true)
+      cuisineType: cuisineType || "general", // Default cuisine type
+      description: description || null, // Set to null if not provided (allowNull: true)  
+      logoUrl: logoUrl || null, // Set to null if not provided (allowNull: true)
       bannerUrl,
       operatingHours: operatingHours || {
         monday: { open: "09:00", close: "18:00", closed: false },
@@ -191,17 +194,17 @@ export async function POST(request) {
         saturday: { open: "09:00", close: "18:00", closed: false },
         sunday: { open: "09:00", close: "18:00", closed: true },
       },
-      bankAccountNumber,
-      bankIfscCode,
-      bankAccountHolderName,
-      bankName,
-      panNumber,
+      bankAccountNumber: bankAccountNumber || "", // Default to empty string
+      bankIfscCode: bankIfscCode || "", // Default to empty string
+      bankAccountHolderName: bankAccountHolderName || "", // Default to empty string
+      bankName: bankName || "", // Default to empty string
+      panNumber: panNumber || "", // Initialize as empty string if not provided
       gstin,
       maxOrdersPerHour: maxOrdersPerHour || 10,
       averagePreparationTime: averagePreparationTime || 15,
       // Initialize onboarding tracking
-      onboardingStatus: "in_progress",
-      onboardingStep: "basic",
+      onboardingStatus: onboardingStatus || "in_progress",
+      onboardingStep: onboardingStep || "password", // Default to password step if basic details are provided
       onboardingStartedAt: new Date(),
       metadata: businessType ? { businessType } : {},
     })

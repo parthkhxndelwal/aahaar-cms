@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, CheckCircle, AlertCircle, CreditCard, Building2, User, MapPin } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
 
 interface AccountCreationStepProps {
   vendorData: any
@@ -251,7 +252,7 @@ export default function AccountCreationStep({
   if (creatingAccount) {
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
-        <Loader2 className="h-12 w-12 animate-spin text-neutral-600" />
+        <Spinner size={48} variant="dark" />
         <h3 className="text-lg font-semibold">Creating your Razorpay account...</h3>
         <p className="text-muted-foreground text-center max-w-md">
           We're setting up your payment processing account. This may take a few moments.
@@ -293,7 +294,7 @@ export default function AccountCreationStep({
                   >
                     {creatingAccount ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Spinner size={16} variant="dark" className="mr-2" />
                         Loading...
                       </>
                     ) : (
@@ -314,7 +315,7 @@ export default function AccountCreationStep({
                   >
                     {creatingAccount ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Spinner size={16} variant="white" className="mr-2" />
                         Resetting...
                       </>
                     ) : (
@@ -333,7 +334,7 @@ export default function AccountCreationStep({
             <Button onClick={createRazorpayAccount} disabled={creatingAccount}>
               {creatingAccount ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Spinner size={16} variant="white" className="mr-2" />
                   Retrying...
                 </>
               ) : (

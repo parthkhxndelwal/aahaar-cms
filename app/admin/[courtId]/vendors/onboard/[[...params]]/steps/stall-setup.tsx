@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "@/components/ui/drawer"
 import { Loader2, Upload, X, AlertCircle, Image as ImageIcon, Crop as CropIcon, Trash2 } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
 import Image from "next/image"
 import ReactCrop, { 
   centerCrop, 
@@ -142,25 +143,32 @@ function CropDrawer({ isOpen, onClose, imageUrl, onCrop, isLoading, cropType }: 
 
         <div className="px-4 flex-1 flex flex-col items-center">
           {/* React Image Crop */}
-          <div className="w-full max-w-md mb-4">
-            <ReactCrop
-              crop={crop}
-              onChange={(_, percentCrop) => setCrop(percentCrop)}
-              onComplete={(c) => onCropComplete(c)}
-              aspect={aspect}
-              className="w-full"
+          <div className="w-full max-w-md mb-4 flex justify-center">
+            <div 
+              className="w-[60%] mx-auto"
+              onPointerDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
             >
-              {imageUrl && (
-                <img
-                  ref={imgRef}
-                  src={imageUrl}
-                  alt="Crop preview"
-                  className="w-full h-auto max-h-[400px] object-contain"
-                  onLoad={onImageLoad}
-                  style={{ backgroundColor: '#262626' }}
-                />
-              )}
-            </ReactCrop>
+              <ReactCrop
+                crop={crop}
+                onChange={(_, percentCrop) => setCrop(percentCrop)}
+                onComplete={(c) => onCropComplete(c)}
+                aspect={aspect}
+                className="w-full"
+              >
+                {imageUrl && (
+                  <img
+                    ref={imgRef}
+                    src={imageUrl}
+                    alt="Crop preview"
+                    className="w-full h-auto max-h-[400px] object-contain"
+                    onLoad={onImageLoad}
+                    style={{ backgroundColor: '#262626' }}
+                  />
+                )}
+              </ReactCrop>
+            </div>
           </div>
 
           <p className="text-xs text-neutral-400 text-center mb-4">
@@ -174,22 +182,22 @@ function CropDrawer({ isOpen, onClose, imageUrl, onCrop, isLoading, cropType }: 
               variant="outline"
               onClick={onClose}
               disabled={isLoading}
-              className="flex-1 bg-neutral-700 text-white border-neutral-600 hover:bg-neutral-600"
+              className="flex-1 bg-neutral-950 hover:bg-neutral-900 border border-none text-white hover:bg-transparent"
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              <X className="h-4 w-4 mr-2" />
               Cancel
             </Button>
             <Button
               onClick={handleCrop}
               disabled={isLoading || !croppedImageUrl}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
+              className="flex-1 bg-neutral-200 hover:bg-blue-200"
             >
               {isLoading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Spinner size={16} variant="white" className="mr-2" />
               ) : (
                 <CropIcon className="h-4 w-4 mr-2" />
               )}
-              {isLoading ? 'Processing...' : 'Crop & Save'}
+              {isLoading ? 'Saving...' : 'Save Cropped Image'}
             </Button>
           </div>
         </DrawerFooter>
@@ -216,6 +224,10 @@ export default function StallSetupStep({
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [uploading, setUploading] = useState(false)
+  const [dragStates, setDragStates] = useState({
+    logo: false,
+    banner: false
+  })
   
   // Cropper state
   const [cropDrawer, setCropDrawer] = useState({
@@ -374,6 +386,27 @@ export default function StallSetupStep({
     }))
   }
 
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent, type: "logo" | "banner") => {
+    e.preventDefault()
+    setDragStates(prev => ({ ...prev, [type]: true }))
+  }
+
+  const handleDragLeave = (e: React.DragEvent, type: "logo" | "banner") => {
+    e.preventDefault()
+    setDragStates(prev => ({ ...prev, [type]: false }))
+  }
+
+  const handleDrop = (e: React.DragEvent, type: "logo" | "banner") => {
+    e.preventDefault()
+    setDragStates(prev => ({ ...prev, [type]: false }))
+    
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      handleFileSelect(files[0], type)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Alert>
@@ -431,129 +464,172 @@ export default function StallSetupStep({
         </p>
       </div>
 
-      {/* Logo Upload */}
-      <div className="space-y-4">
-        <Label>Stall Logo</Label>
-        <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6">
-          {formData.logoUrl ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <Image
-                  src={formData.logoUrl}
-                  alt="Logo preview"
-                  width={64}
-                  height={64}
-                  className="rounded-lg object-cover"
-                />
-                <div>
-                  <p className="font-medium">Logo uploaded</p>
-                  <p className="text-sm text-muted-foreground">Click to change</p>
+      {/* Logo and Banner Upload */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Logo Upload */}
+        <div className="space-y-4">
+          <Label>Stall Logo</Label>
+          <div 
+            className={`border-2 border-dashed rounded-lg p-6 transition-colors cursor-pointer h-48 flex flex-col justify-center ${
+              dragStates.logo 
+                ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" 
+                : "border-muted-foreground/25"
+            }`}
+            onDragOver={(e) => handleDragOver(e, "logo")}
+            onDragLeave={(e) => handleDragLeave(e, "logo")}
+            onDrop={(e) => handleDrop(e, "logo")}
+            onClick={() => logoInputRef.current?.click()}
+          >
+            {formData.logoUrl ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <Image
+                    key={formData.logoUrl}
+                    src={formData.logoUrl}
+                    alt="Logo preview"
+                    width={64}
+                    height={64}
+                    className="rounded-lg object-cover w-16 h-16"
+                  />
+                  <div>
+                    <p className="font-medium">Logo uploaded</p>
+                    <p className="text-sm text-muted-foreground">
+                      Click to change or drag & drop a new image
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => removeImage("logo")}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="text-center">
-              <ImageIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="font-medium mb-2">Upload your stall logo</p>
-              <p className="text-sm text-muted-foreground mb-4">
-                Recommended: Square image, max 2MB
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => logoInputRef.current?.click()}
-                className="gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                Choose File
-              </Button>
-            </div>
-          )}
-          <input
-            ref={logoInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) handleFileSelect(file, "logo")
-            }}
-          />
-        </div>
-        {errors.logo && (
-          <p className="text-sm text-red-500">{errors.logo}</p>
-        )}
-      </div>
-
-      {/* Banner Upload */}
-      <div className="space-y-4">
-        <Label>Stall Banner</Label>
-        <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6">
-          {formData.bannerUrl ? (
-            <div className="space-y-4">
-              <div className="relative">
-                <Image
-                  src={formData.bannerUrl}
-                  alt="Banner preview"
-                  width={400}
-                  height={200}
-                  className="rounded-lg object-cover w-full h-32"
-                />
                 <Button
                   variant="outline"
                   size="sm"
-                  className="absolute top-2 right-2"
-                  onClick={() => removeImage("banner")}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeImage("logo")
+                  }}
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => bannerInputRef.current?.click()}
-                className="gap-2 w-full"
-              >
-                <Upload className="h-4 w-4" />
-                Change Banner
-              </Button>
-            </div>
-          ) : (
-            <div className="text-center">
-              <ImageIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="font-medium mb-2">Upload your stall banner</p>
-              <p className="text-sm text-muted-foreground mb-4">
-                Recommended: 16:9 aspect ratio, max 2MB
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => bannerInputRef.current?.click()}
-                className="gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                Choose File
-              </Button>
-            </div>
+            ) : (
+              <div className="flex items-center space-x-6">
+                <ImageIcon className="h-16 w-16 text-muted-foreground flex-shrink-0" />
+                <div className="text-left">
+                  <p className="font-medium mb-2">
+                    {dragStates.logo ? "Drop image here" : "Upload your stall logo"}
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Drag & drop an image here, or click to browse
+                    <br />
+                    Recommended: Square image, max 2MB
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => logoInputRef.current?.click()}
+                    className="gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Choose File
+                  </Button>
+                </div>
+              </div>
+            )}
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleFileSelect(file, "logo")
+              }}
+            />
+          </div>
+          {errors.logo && (
+            <p className="text-sm text-red-500">{errors.logo}</p>
           )}
-          <input
-            ref={bannerInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) handleFileSelect(file, "banner")
-            }}
-          />
         </div>
-        {errors.banner && (
-          <p className="text-sm text-red-500">{errors.banner}</p>
-        )}
+
+        {/* Banner Upload */}
+        <div className="space-y-4">
+          <Label>Stall Banner</Label>
+          <div 
+            className={`border-2 border-dashed rounded-lg p-6 transition-colors cursor-pointer h-48 flex flex-col justify-center ${
+              dragStates.banner 
+                ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" 
+                : "border-muted-foreground/25"
+            }`}
+            onDragOver={(e) => handleDragOver(e, "banner")}
+            onDragLeave={(e) => handleDragLeave(e, "banner")}
+            onDrop={(e) => handleDrop(e, "banner")}
+            onClick={() => bannerInputRef.current?.click()}
+          >
+            {formData.bannerUrl ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <Image
+                    key={formData.bannerUrl}
+                    src={formData.bannerUrl}
+                    alt="Banner preview"
+                    width={96}
+                    height={64}
+                    className="rounded-lg object-cover h-16"
+                    style={{ width: 'auto' }}
+                  />
+                  <div>
+                    <p className="font-medium">Banner uploaded</p>
+                    <p className="text-sm text-muted-foreground">
+                      Click to change or drag & drop a new image
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeImage("banner")
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-6">
+                <ImageIcon className="h-16 w-16 text-muted-foreground flex-shrink-0" />
+                <div className="text-left">
+                  <p className="font-medium mb-2">
+                    {dragStates.banner ? "Drop image here" : "Upload your stall banner"}
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Drag & drop an image here, or click to browse
+                    <br />
+                    Recommended: 16:9 aspect ratio, max 2MB
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => bannerInputRef.current?.click()}
+                    className="gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Choose File
+                  </Button>
+                </div>
+              </div>
+            )}
+            <input
+              ref={bannerInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleFileSelect(file, "banner")
+              }}
+            />
+          </div>
+          {errors.banner && (
+            <p className="text-sm text-red-500">{errors.banner}</p>
+          )}
+        </div>
       </div>
 
       {/* Image Crop Drawer */}
@@ -575,7 +651,7 @@ export default function StallSetupStep({
           disabled={loading}
           className="gap-2"
         >
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {loading && <Spinner size={16} variant="white" />}
           Next Step
         </Button>
       </div>

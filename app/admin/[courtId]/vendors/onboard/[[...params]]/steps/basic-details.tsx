@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, AlertCircle } from "lucide-react"
+import { AlertCircle } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
 
 interface BasicDetailsStepProps {
   vendorData: any
@@ -35,6 +36,17 @@ export default function BasicDetailsStep({
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isValidating, setIsValidating] = useState(false)
+
+  // Sync form data with vendor data on mount and when vendor data changes
+  useEffect(() => {
+    console.log('Vendor data changed, updating form:', vendorData)
+    setFormData({
+      stallName: vendorData?.stallName || "",
+      vendorName: vendorData?.vendorName || "",
+      contactEmail: vendorData?.contactEmail || "",
+      contactPhone: vendorData?.contactPhone || "",
+    })
+  }, [vendorData])
 
   // Remove the problematic useEffect that was causing infinite re-renders
   // useEffect(() => {
@@ -138,21 +150,37 @@ export default function BasicDetailsStep({
   }
 
   const handleSubmit = async () => {
+    console.log('Form submission started with data:', formData)
+    
     if (!validateForm()) {
+      console.log('Form validation failed, errors:', errors)
       return
     }
 
+    // Always update vendor data first, regardless of duplicate checks
+    console.log('Updating vendor data before validation...')
+    updateVendorData(formData)
+
     // Skip duplicate check if editing existing vendor
     if (!vendorId) {
+      console.log('Checking for duplicates...')
       const isValid = await checkDuplicates()
       if (!isValid) {
+        console.log('Duplicate check failed')
         return
       }
     }
 
-    // Update vendor data before proceeding to next step
-    updateVendorData(formData)
-    onNext(formData)
+    console.log('Proceeding to next step with data:', formData)
+    
+    // Add onboarding tracking - mark basic step as completed, next step is password
+    const dataWithOnboardingInfo = {
+      ...formData,
+      onboardingStep: 'password', // Next step after basic details
+      onboardingStatus: 'in_progress'
+    }
+    
+    onNext(dataWithOnboardingInfo)
   }
 
   const handleInputChange = (field: string, value: string) => {
@@ -233,9 +261,9 @@ export default function BasicDetailsStep({
         </div>
       </div>
 
-      <Card className="bg-blue-50">
+      <Card className="bg-blue-50 dark:bg-zinc-900 border-blue-200 dark:border-neutral-800">
         <CardContent className="pt-6">
-          <h3 className="font-medium mb-2">What happens next?</h3>
+          <h3 className="font-medium mb-2 text-neutral-800 dark:text-neutral-200">What happens next?</h3>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>• A vendor account will be created with these details</li>
             <li>• The vendor will receive login credentials via email</li>
@@ -253,7 +281,7 @@ export default function BasicDetailsStep({
           disabled={loading || isValidating}
           className="gap-2"
         >
-          {(loading || isValidating) && <Loader2 className="h-4 w-4 animate-spin" />}
+          {(loading || isValidating) && <Spinner size={16} variant="white" />}
           {isValidating ? "Validating..." : "Next Step"}
         </Button>
       </div>
