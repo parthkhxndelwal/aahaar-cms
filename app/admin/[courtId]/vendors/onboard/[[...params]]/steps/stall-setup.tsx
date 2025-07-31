@@ -1,14 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, SyntheticEvent } from "react"
+import { useState, useRef, SyntheticEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "@/components/ui/drawer"
-import { Loader2, Upload, X, AlertCircle, Image as ImageIcon, Crop as CropIcon, Trash2 } from "lucide-react"
+import { Upload, X, AlertCircle, Image as ImageIcon, Crop as CropIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import Image from "next/image"
 import ReactCrop, { 
@@ -61,7 +60,7 @@ function centerAspectCrop(
 }
 
 function CropDrawer({ isOpen, onClose, imageUrl, onCrop, isLoading, cropType }: CropDrawerProps) {
-  const aspect = cropType === "logo" ? 1 : 16/9 // Square for logo, 16:9 for banner
+  const aspect = cropType === "logo" ? 1 : 4/1 // Square for logo, 16:9 for banner
   const imgRef = useRef<HTMLImageElement | null>(null)
   
   const [crop, setCrop] = useState<CropType>()
@@ -172,7 +171,7 @@ function CropDrawer({ isOpen, onClose, imageUrl, onCrop, isLoading, cropType }: 
           </div>
 
           <p className="text-xs text-neutral-400 text-center mb-4">
-            Drag the corners to adjust the crop area. The image will be cropped to {cropType === "logo" ? "a square" : "16:9 aspect ratio"}.
+            Drag the corners to adjust the crop area. The image will be cropped to {cropType === "logo" ? "a square" : "4:1 aspect ratio"}.
           </p>
         </div>
 
@@ -190,7 +189,7 @@ function CropDrawer({ isOpen, onClose, imageUrl, onCrop, isLoading, cropType }: 
             <Button
               onClick={handleCrop}
               disabled={isLoading || !croppedImageUrl}
-              className="flex-1 bg-neutral-200 hover:bg-blue-200"
+              className="flex-1 bg-neutral-800 hover:bg-blue-800 text-neutral-100 dark:bg-neutral-200 dark:hover:bg-blue-200 dark:text-neutral-900"
             >
               {isLoading ? (
                 <Spinner size={16} variant="white" className="mr-2" />
@@ -260,6 +259,10 @@ export default function StallSetupStep({
       newErrors.description = "Description is required"
     } else if (formData.description.trim().length < 10) {
       newErrors.description = "Description must be at least 10 characters"
+    }
+
+    if (!formData.logoUrl.trim()) {
+      newErrors.logo = "Logo is required. Please upload a logo image."
     }
 
     setErrors(newErrors)
@@ -408,7 +411,7 @@ export default function StallSetupStep({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 dark:text-neutral-200">
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
@@ -416,7 +419,7 @@ export default function StallSetupStep({
         </AlertDescription>
       </Alert>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 ">
         <div className="space-y-2">
           <Label htmlFor="stallLocation">Stall Location *</Label>
           <Input
@@ -563,23 +566,22 @@ export default function StallSetupStep({
             onClick={() => bannerInputRef.current?.click()}
           >
             {formData.bannerUrl ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+              <div className="flex items-center justify-between w-full">
+                <div className="flex flex-col  space-y-2">
+                  
                   <Image
                     key={formData.bannerUrl}
                     src={formData.bannerUrl}
                     alt="Banner preview"
-                    width={96}
-                    height={64}
-                    className="rounded-lg object-cover h-16"
+                    width={160}
+                    height={40}
+                    className="rounded-lg object-cover h-12"
                     style={{ width: 'auto' }}
                   />
-                  <div>
-                    <p className="font-medium">Banner uploaded</p>
-                    <p className="text-sm text-muted-foreground">
-                      Click to change or drag & drop a new image
-                    </p>
-                  </div>
+                  <p className="font-medium">Banner uploaded</p>
+                  <p className="text-sm text-muted-foreground">
+                    Click to change or drag & drop a new image
+                  </p>
                 </div>
                 <Button
                   variant="outline"
@@ -602,7 +604,7 @@ export default function StallSetupStep({
                   <p className="text-sm text-muted-foreground mb-4">
                     Drag & drop an image here, or click to browse
                     <br />
-                    Recommended: 16:9 aspect ratio, max 2MB
+                    Recommended: 4:1 aspect ratio, max 2MB
                   </p>
                   <Button
                     variant="outline"

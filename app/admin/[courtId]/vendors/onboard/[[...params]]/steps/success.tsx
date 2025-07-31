@@ -29,20 +29,51 @@ export default function SuccessStep({
       origin: { y: 0.6 }
     })
 
+    // Ensure vendor is marked as completed when success step loads
+    const ensureCompletion = async () => {
+      if (vendorId && (vendorData.onboardingStatus !== 'completed' || vendorData.onboardingStep !== 'completed')) {
+        try {
+          console.log('🎯 Ensuring vendor onboarding completion on success step...')
+          
+          const response = await fetch(`/api/admin/vendors/${vendorId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              onboardingStep: 'completed',
+              onboardingStatus: 'completed',
+              status: 'active',
+              courtId
+            }),
+          })
+          
+          const result = await response.json()
+          if (result.success) {
+            console.log('✅ Vendor onboarding marked as completed successfully')
+          } else {
+            console.error('❌ Failed to mark vendor onboarding as completed:', result.message)
+          }
+        } catch (error) {
+          console.error('❌ Error ensuring vendor completion:', error)
+        }
+      }
+    }
+
+    ensureCompletion()
+
     // Start countdown
     const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer)
-          router.push(`/admin/${courtId}/vendors`)
-          return 0
-        }
-        return prev - 1
-      })
+      setCountdown((prev) => prev - 1)
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [courtId, router])
+  }, [vendorId, vendorData.onboardingStatus, vendorData.onboardingStep, courtId])
+  
+  // Separate effect for navigation
+  useEffect(() => {
+    if (countdown <= 0) {
+      router.push(`/admin/${courtId}/vendors`)
+    }
+  }, [countdown, courtId, router])
 
   const redirectNow = () => {
     router.push(`/admin/${courtId}/vendors`)

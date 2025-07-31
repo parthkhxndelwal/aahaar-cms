@@ -143,6 +143,7 @@ export default function VendorOnboardingPage() {
           const hasIncompleteStatus = vendor.onboardingStatus === 'in_progress'
           const hasIncompleteMetadata = !vendor.metadata?.onboardingCompleted && vendor.metadata?.onboardingStep
           const hasNoRazorpayAccount = !vendor.razorpayAccountId && vendor.stallName
+          const isNotCompleted = vendor.onboardingStatus !== 'completed' && vendor.onboardingStep !== 'completed'
           
           console.log(`Vendor ${vendor.stallName || vendor.id}:`, {
             onboardingStatus: vendor.onboardingStatus,
@@ -150,10 +151,11 @@ export default function VendorOnboardingPage() {
             hasIncompleteStatus,
             hasIncompleteMetadata,
             hasNoRazorpayAccount,
-            isIncomplete: hasIncompleteStatus || hasIncompleteMetadata || hasNoRazorpayAccount
+            isNotCompleted,
+            isIncomplete: (hasIncompleteStatus || hasIncompleteMetadata || hasNoRazorpayAccount) && isNotCompleted
           })
           
-          return hasIncompleteStatus || hasIncompleteMetadata || hasNoRazorpayAccount
+          return (hasIncompleteStatus || hasIncompleteMetadata || hasNoRazorpayAccount) && isNotCompleted
         })
         
         if (incompleteVendor) {
@@ -206,7 +208,7 @@ export default function VendorOnboardingPage() {
       { step: "legal", isComplete: !!vendor.panNumber }, // PAN number added
       { step: "account", isComplete: !!vendor.razorpayAccountId }, // Razorpay account created
       { step: "config", isComplete: !!(vendor.maxOrdersPerHour && vendor.averagePreparationTime) }, // Config set
-      { step: "success", isComplete: vendor.onboardingStatus === 'completed' } // Fully completed
+      { step: "success", isComplete: vendor.onboardingStatus === 'completed' || vendor.onboardingStep === 'completed' } // Fully completed
     ]
     
     console.log('Step completion status:')
@@ -353,7 +355,7 @@ export default function VendorOnboardingPage() {
     }
     
     // Step 3: Operating Hours (can only be completed if stall setup is done)
-    if (completedSteps.includes(2) && vendorData.operatingHours) {
+    if (completedSteps.includes(2) && vendorData.operatingHours && Object.keys(vendorData.operatingHours).length > 0) {
       completedSteps.push(3)
     }
     
@@ -395,7 +397,7 @@ export default function VendorOnboardingPage() {
     const currentOnboardingStepIndex = STEPS.findIndex(step => step.key === vendorData.onboardingStep)
     
     // If onboarding is completed, all steps are completed
-    if (vendorData.onboardingStatus === 'completed') {
+    if (vendorData.onboardingStatus === 'completed' || vendorData.onboardingStep === 'completed') {
       return true
     }
     
@@ -409,6 +411,24 @@ export default function VendorOnboardingPage() {
     
     // Check if the user is allowed to navigate to this step
     const maxAllowedStepIndex = getMaxAllowedStepIndex()
+    console.log(`Attempting to navigate to step ${stepIndex}. Max allowed: ${maxAllowedStepIndex}`)
+    console.log('Current vendor data for navigation check:', {
+      stallName: vendorData.stallName,
+      vendorName: vendorData.vendorName,
+      contactEmail: vendorData.contactEmail,
+      contactPhone: vendorData.contactPhone,
+      id: vendorData.id,
+      logoUrl: vendorData.logoUrl,
+      operatingHours: !!vendorData.operatingHours,
+      bankAccountNumber: vendorData.bankAccountNumber,
+      bankIfscCode: vendorData.bankIfscCode,
+      panNumber: vendorData.panNumber,
+      maxOrdersPerHour: vendorData.maxOrdersPerHour,
+      averagePreparationTime: vendorData.averagePreparationTime,
+      onboardingStep: vendorData.onboardingStep,
+      onboardingStatus: vendorData.onboardingStatus
+    })
+    
     if (stepIndex > maxAllowedStepIndex) {
       console.log(`Cannot navigate to step ${stepIndex}. Maximum allowed step is ${maxAllowedStepIndex}`)
       return
@@ -419,6 +439,7 @@ export default function VendorOnboardingPage() {
       ? `/admin/${courtId}/vendors/onboard/${step.key}/${vendorData.id}`
       : `/admin/${courtId}/vendors/onboard/${step.key}`
     
+    console.log(`Navigating to: ${url}`)
     router.push(url)
   }
 
@@ -474,11 +495,13 @@ export default function VendorOnboardingPage() {
         })
         
         const result = await response.json()
+        console.log('Update vendor response:', result)
         if (!result.success) {
           setError(result.message || "Failed to update vendor")
           return false
         }
         
+        console.log('Vendor updated successfully')
         return true
       } else {
         // Create new vendor
@@ -517,16 +540,26 @@ export default function VendorOnboardingPage() {
       const nextStepIndex = currentStepIndex + 1
       const nextStepKey = nextStepIndex < STEPS.length ? STEPS[nextStepIndex].key : 'completed'
       
+      // Special handling for the final step (config -> success)
+      const isCompletingOnboarding = currentStepKey === 'config' && nextStepKey === 'success'
+      
       const dataWithOnboardingInfo = {
         ...stepData,
-        onboardingStep: nextStepKey, // Set to the next step we're going to
-        onboardingStatus: nextStepKey === 'completed' ? 'completed' : 'in_progress'
+        onboardingStep: isCompletingOnboarding ? 'completed' : nextStepKey,
+        onboardingStatus: isCompletingOnboarding ? 'completed' : 'in_progress'
       }
       
-      console.log(`Completing step "${currentStepKey}", setting onboardingStep to "${nextStepKey}"`)
+      console.log(`Completing step "${currentStepKey}", setting onboardingStep to "${dataWithOnboardingInfo.onboardingStep}", status to "${dataWithOnboardingInfo.onboardingStatus}"`)
       
       const saved = await saveVendorData(dataWithOnboardingInfo)
       if (!saved) return
+      
+      // Update local vendor data with ALL the step data that was just saved
+      updateVendorData({
+        ...stepData, // Include all the step data
+        onboardingStep: dataWithOnboardingInfo.onboardingStep,
+        onboardingStatus: dataWithOnboardingInfo.onboardingStatus
+      })
     }
     goToStep(currentStepIndex + 1)
   }
@@ -537,7 +570,67 @@ export default function VendorOnboardingPage() {
 
   const currentStep = STEPS[currentStepIndex]
   const CurrentStepComponent = currentStep.component
-  const progressPercentage = ((currentStepIndex + 1) / STEPS.length) * 100
+  
+  // Calculate progress based on actually completed steps, not current step position
+  const getCompletedStepsCount = () => {
+    let completedCount = 0
+    
+    // Step 0: Basic Details
+    if (vendorData.stallName && vendorData.vendorName && vendorData.contactEmail && vendorData.contactPhone) {
+      completedCount++
+    } else return completedCount
+    
+    // Step 1: Password Creation (User account created)
+    if (vendorData.id) {
+      completedCount++
+    } else return completedCount
+    
+    // Step 2: Stall Setup (Logo uploaded)
+    if (vendorData.logoUrl) {
+      completedCount++
+    } else return completedCount
+    
+    // Step 3: Operating Hours
+    if (vendorData.operatingHours && Object.keys(vendorData.operatingHours).length > 0) {
+      completedCount++
+    } else return completedCount
+    
+    // Step 4: Bank Details
+    if (vendorData.bankAccountNumber && vendorData.bankIfscCode) {
+      completedCount++
+    } else return completedCount
+    
+    // Step 5: Legal Compliance (PAN number)
+    if (vendorData.panNumber) {
+      completedCount++
+    } else return completedCount
+    
+    // Step 6: Account Creation (Razorpay account - we'll check this via API or assume completed if we reach config)
+    if (vendorData.onboardingStep && 
+        ['config', 'success'].includes(vendorData.onboardingStep)) {
+      completedCount++
+    } else if (vendorData.onboardingStatus === 'completed') {
+      completedCount++
+    } else if (vendorData.onboardingStep === 'account') {
+      // If we're currently on the account step, don't count it as completed yet
+      return completedCount
+    } else return completedCount
+    
+    // Step 7: Final Configuration
+    if (vendorData.maxOrdersPerHour && vendorData.averagePreparationTime) {
+      completedCount++
+    } else return completedCount
+    
+    // Step 8: Success (Fully completed)
+    if (vendorData.onboardingStatus === 'completed') {
+      completedCount++
+    }
+    
+    return completedCount
+  }
+  
+  const completedStepsCount = getCompletedStepsCount()
+  const progressPercentage = (completedStepsCount / STEPS.length) * 100
 
   if (loading || checkingIncompleteOnboarding) {
     return (
@@ -571,12 +664,12 @@ export default function VendorOnboardingPage() {
         <Button
           variant="ghost"
           onClick={() => router.push(`/admin/${courtId}/vendors`)}
-          className="gap-2"
+          className="gap-2 dark:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl dark:text-neutral-200 font-bold">
             Vendor Onboarding
           </h1>
           <p className="text-muted-foreground">

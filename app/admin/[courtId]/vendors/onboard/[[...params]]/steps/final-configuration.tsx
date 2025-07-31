@@ -74,14 +74,14 @@ export default function FinalConfigurationStep({
       return
     }
 
-    // Mark vendor as fully onboarded
+    // Mark vendor as fully onboarded - this will move to the success step
     const finalData = {
       ...formData,
       status: "active",
+      // Don't set onboardingStep here - let the parent component handle the transition to success
       metadata: {
         ...vendorData.metadata,
-        onboardingCompleted: true,
-        onboardingStep: "completed"
+        onboardingCompleted: true
       }
     }
 

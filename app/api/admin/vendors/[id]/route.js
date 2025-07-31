@@ -146,7 +146,19 @@ export async function PATCH(request, { params }) {
       }
       
       updateData.onboardingStep = currentStep
-      updateData.onboardingStatus = 'in_progress'
+      
+      // Mark as completed if we've reached the success step, otherwise in_progress
+      if (currentStep === 'completed' || currentStep === 'success') {
+        updateData.onboardingStatus = 'completed'
+        updateData.onboardingCompletedAt = new Date()
+        
+        // Ensure vendor is active when onboarding is completed
+        if (!updateData.status) {
+          updateData.status = 'active'
+        }
+      } else {
+        updateData.onboardingStatus = 'in_progress'
+      }
       
       // Mark as started if not already
       if (!vendor.onboardingStartedAt) {

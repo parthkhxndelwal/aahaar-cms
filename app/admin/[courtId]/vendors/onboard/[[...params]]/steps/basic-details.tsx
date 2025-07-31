@@ -193,7 +193,7 @@ export default function BasicDetailsStep({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 dark:text-neutral-200">
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>

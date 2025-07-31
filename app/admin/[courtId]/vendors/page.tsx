@@ -419,7 +419,7 @@ export default function VendorsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Vendors</h1>
+          <h1 className="text-3xl font-bold dark:text-neutral-200">Vendors</h1>
           <p className="text-muted-foreground">
             Manage vendors and their onboarding status
           </p>

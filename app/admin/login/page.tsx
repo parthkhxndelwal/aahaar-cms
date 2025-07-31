@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/contexts/auth-context"
+import { useAdminAuth } from "@/contexts/admin-auth-context"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
@@ -20,7 +20,7 @@ export default function AdminLoginPage() {
   })
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
-  const { login } = useAuth()
+  const { login } = useAdminAuth()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
