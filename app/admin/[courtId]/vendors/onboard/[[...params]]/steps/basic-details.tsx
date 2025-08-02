@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,6 +29,7 @@ export default function BasicDetailsStep({
   courtId,
   vendorId,
 }: BasicDetailsStepProps) {
+  const router = useRouter()
   const [formData, setFormData] = useState({
     stallName: vendorData?.stallName || "",
     vendorName: vendorData?.vendorName || "",
@@ -192,6 +194,13 @@ export default function BasicDetailsStep({
     }
   }
 
+  const handleCancel = () => {
+    // For the basic details step (first step), redirect to vendors list
+    // For continuing vendors, we could call onBack, but since this is basic details,
+    // it's always the first step so we should exit the onboarding flow
+    router.push(`/admin/${courtId}/vendors`)
+  }
+
   return (
     <div className="space-y-6 dark:text-neutral-200">
       <Alert>
@@ -273,7 +282,7 @@ export default function BasicDetailsStep({
       </Card>
 
       <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack}>
+        <Button variant="outline" onClick={handleCancel}>
           Cancel
         </Button>
         <Button 

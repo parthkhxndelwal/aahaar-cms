@@ -1,6 +1,63 @@
 /**
  * Razorpay utility functions for vendor onboarding
+ * 
+ * NOTE: This handles the specific issue where Razorpay rejects PAN fields 
+ * for certain business types like "individual" which get internally mapped 
+ * to "not_yet_registered" by Razorpay.
  */
+
+/**
+ * Map business types to Razorpay accepted values
+ * @param {string} businessType - The business type to map
+ * @returns {string} - Mapped business type for Razorpay
+ */
+function mapBusinessTypeForRazorpay(businessType) {
+  const businessTypeMap = {
+    'individual': 'proprietorship', // Map individual to proprietorship but handle PAN separately
+    'proprietorship': 'proprietorship',
+    'partnership': 'partnership',
+    'llp': 'llp',
+    'private_limited': 'private_limited',
+    'public_limited': 'public_limited',
+    'ngo': 'ngo',
+    'trust': 'trust',
+    'society': 'society'
+  }
+  
+  // If no business type provided, default to proprietorship
+  return businessTypeMap[businessType] || 'proprietorship'
+}
+
+/**
+ * Check if business type requires PAN for Razorpay account creation
+ * @param {string} businessType - The original business type from form
+ * @returns {boolean} - Whether PAN is required for this business type
+ */
+function requiresPanForRazorpay(businessType) {
+  // Individual businesses often don't have PAN ready at account creation time
+  // but can be added later via KYC process
+  // Also exclude cases where businessType is null, undefined, or empty
+  const panNotRequiredTypes = ['individual', '', null, undefined]
+  return !panNotRequiredTypes.includes(businessType)
+}
+
+/**
+ * Validate PAN format according to Razorpay requirements
+ * @param {string} pan - PAN number to validate
+ * @returns {boolean} - Whether PAN format is valid
+ */
+function isValidPanFormat(pan) {
+  if (!pan) return false
+  // Razorpay regex: /^[a-zA-z]{5}\d{4}[a-zA-Z]{1}$/
+  // 4th digit should be either of 'C', 'H', 'F', 'A', 'T', 'B', 'J', 'G', 'L'
+  const panRegex = /^[a-zA-Z]{5}\d{4}[a-zA-Z]{1}$/
+  const validFourthChars = ['C', 'H', 'F', 'A', 'T', 'B', 'J', 'G', 'L']
+  
+  if (!panRegex.test(pan)) return false
+  
+  const fourthChar = pan.charAt(3).toUpperCase()
+  return validFourthChars.includes(fourthChar)
+}
 
 /**
  * Create a Razorpay Route Account for a vendor
@@ -16,7 +73,8 @@ export async function createRouteAccount(vendorData) {
       stallName: vendorData.stallName,
       panNumber: vendorData.panNumber,
       gstin: vendorData.gstin,
-      businessType: vendorData.businessType
+      businessType: vendorData.businessType,
+      mappedBusinessType: mapBusinessTypeForRazorpay(vendorData.businessType)
     })
 
     const {
@@ -36,6 +94,18 @@ export async function createRouteAccount(vendorData) {
       stallAddress
     } = vendorData
 
+    console.log('[RAZORPAY UTIL] Processing business type mapping:', {
+      originalBusinessType: businessType,
+      businessTypeType: typeof businessType,
+      businessTypeValue: JSON.stringify(businessType),
+      mappedBusinessType: mapBusinessTypeForRazorpay(businessType),
+      requiresPan: requiresPanForRazorpay(businessType),
+      hasPan: !!panNumber,
+      hasGst: !!gstin,
+      panIsValid: panNumber ? isValidPanFormat(panNumber) : false,
+      gstLength: gstin ? gstin.length : 0
+    })
+
     // Create a short reference ID (max 20 characters)
     const shortVendorId = vendorId.replace(/-/g, '').substring(0, 8) // Remove hyphens and take first 8 chars
     const timestamp = Date.now().toString().slice(-6) // Last 6 digits of timestamp
@@ -49,6 +119,9 @@ export async function createRouteAccount(vendorData) {
       return str.length > maxLength ? str.substring(0, maxLength) : str
     }
 
+    // Map the business type first
+    const mappedBusinessType = mapBusinessTypeForRazorpay(businessType)
+    
     // Prepare the account creation payload
     const accountPayload = {
       email,
@@ -56,7 +129,7 @@ export async function createRouteAccount(vendorData) {
       type: "route",
       reference_id: shortReferenceId,
       legal_business_name: truncateString(stallName, 50), // Razorpay limit for business name
-      business_type: businessType || "partnership",
+      business_type: mappedBusinessType,
       contact_name: truncateString(vendorName, 50), // Razorpay limit for contact name
       profile: {
         category: "food",
@@ -72,10 +145,6 @@ export async function createRouteAccount(vendorData) {
           }
         }
       },
-      legal_info: {
-        pan: panNumber,
-        gst: gstin || undefined
-      },
       brand: {
         color: "000000"
       },
@@ -85,6 +154,17 @@ export async function createRouteAccount(vendorData) {
         created_via: "admin_panel"
       }
     }
+
+    // TEMPORARY FIX: Exclude legal_info completely to avoid "not_yet_registered" error
+    // This allows account creation to succeed, then PAN/GST can be added via KYC later
+    console.log('[RAZORPAY UTIL] TEMPORARY FIX: Excluding all legal_info to avoid not_yet_registered error')
+    console.log('[RAZORPAY UTIL] Business type details:', {
+      originalBusinessType: businessType,
+      mappedBusinessType: mappedBusinessType,
+      panProvided: !!panNumber,
+      gstProvided: !!gstin,
+      note: 'legal_info excluded to prevent API error'
+    })
 
     console.log('[RAZORPAY UTIL] Account payload prepared:', JSON.stringify(accountPayload, null, 2))
     

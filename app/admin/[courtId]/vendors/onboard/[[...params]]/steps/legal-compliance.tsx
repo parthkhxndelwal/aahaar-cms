@@ -71,7 +71,7 @@ export default function LegalComplianceStep({
   vendorId,
 }: LegalComplianceStepProps) {
   const [formData, setFormData] = useState({
-    businessType: vendorData?.metadata?.businessType || "",
+    businessType: vendorData?.metadata?.businessType || vendorData?.businessType || "",
     panNumber: vendorData?.panNumber || "",
     gstin: vendorData?.gstin || "",
     panDocumentUrl: vendorData?.metadata?.panDocumentUrl || "",
@@ -79,10 +79,107 @@ export default function LegalComplianceStep({
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [uploading, setUploading] = useState(false)
+  const [checkingRazorpayAccount, setCheckingRazorpayAccount] = useState(false)
+  const [hasRazorpayAccount, setHasRazorpayAccount] = useState(false)
   const panDocRef = useRef<HTMLInputElement>(null)
 
   const selectedBusinessType = BUSINESS_TYPES.find(bt => bt.value === formData.businessType)
   const isGstRequired = selectedBusinessType?.gstRequired || false
+
+  // Debug logging for legal compliance initialization
+  useEffect(() => {
+    console.log('🏛️ Legal Compliance Step initialized with:', {
+      businessType: formData.businessType,
+      panNumber: formData.panNumber,
+      gstin: formData.gstin,
+      vendorBusinessType: vendorData?.businessType,
+      metadataBusinessType: vendorData?.metadata?.businessType,
+      razorpayAccountId: vendorData?.razorpayAccountId,
+      hasRazorpayAccount: !!vendorData?.razorpayAccountId
+    })
+  }, [])
+
+  // Monitor changes to vendor data and log them
+  useEffect(() => {
+    console.log('🔄 Vendor data updated:', {
+      vendorId,
+      hasVendorData: !!vendorData,
+      vendorDataKeys: vendorData ? Object.keys(vendorData) : 'none'
+    })
+  }, [vendorData, vendorId])
+
+  // Check for existing Razorpay account when component mounts or vendorId changes
+  useEffect(() => {
+    if (vendorId && !checkingRazorpayAccount) {
+      checkExistingRazorpayAccount()
+    } else if (vendorData?.razorpayAccountId && !checkingRazorpayAccount) {
+      // If razorpay account ID is already available in vendor data, verify it exists
+      verifyAccountFromVendorData(vendorData.razorpayAccountId)
+    }
+  }, [vendorId, vendorData?.razorpayAccountId])
+
+  const verifyAccountFromVendorData = async (accountId: string) => {
+    if (!vendorId) return
+
+    setCheckingRazorpayAccount(true)
+    
+    try {
+      const accountResponse = await fetch(`/api/admin/vendors/${vendorId}/razorpay-account`)
+      const accountResult = await accountResponse.json()
+      
+      if (accountResult.success) {
+        console.log('✅ Verified existing Razorpay account from vendor data:', accountId)
+        setHasRazorpayAccount(true)
+      } else {
+        console.log('❌ Could not verify Razorpay account from vendor data:', accountId)
+        setHasRazorpayAccount(false)
+      }
+    } catch (error) {
+      console.error("Error verifying Razorpay account from vendor data:", error)
+      setHasRazorpayAccount(false)
+    } finally {
+      setCheckingRazorpayAccount(false)
+    }
+  }
+
+  const checkExistingRazorpayAccount = async () => {
+    if (!vendorId) return
+
+    setCheckingRazorpayAccount(true)
+    
+    try {
+      const response = await fetch(`/api/admin/vendors/${vendorId}`)
+      const result = await response.json()
+
+      if (result.success && result.data.vendor.razorpayAccountId) {
+        console.log('🎯 Found existing Razorpay account:', result.data.vendor.razorpayAccountId)
+        // Vendor already has an account, try to fetch its details to verify it exists
+        try {
+          const accountResponse = await fetch(`/api/admin/vendors/${vendorId}/razorpay-account`)
+          const accountResult = await accountResponse.json()
+          
+          if (accountResult.success) {
+            console.log('✅ Successfully verified existing account details')
+            setHasRazorpayAccount(true)
+          } else {
+            console.log('⚠️ Account ID exists but cannot fetch details')
+            setHasRazorpayAccount(false)
+          }
+        } catch (err) {
+          console.error('❌ Error fetching account details:', err)
+          setHasRazorpayAccount(false)
+        }
+      } else {
+        console.log('❌ No existing Razorpay account found')
+        setHasRazorpayAccount(false)
+      }
+    } catch (error) {
+      console.error("Error checking existing Razorpay account:", error)
+      setHasRazorpayAccount(false)
+    } finally {
+      setCheckingRazorpayAccount(false)
+    }
+  }
 
   // Remove the problematic useEffect that was causing infinite re-renders
   // useEffect(() => {
@@ -199,18 +296,24 @@ export default function LegalComplianceStep({
       return
     }
 
-    // Update vendor data before proceeding to next step
-    updateVendorData({
+    // Prepare data with business type in the correct structure
+    const dataToSend = {
       ...formData,
+      businessType: formData.businessType, // Add at root level for consistency
       metadata: {
         ...vendorData?.metadata,
         businessType: formData.businessType,
         panDocumentUrl: formData.panDocumentUrl,
         panDocFileId: formData.panDocFileId,
       }
-    })
+    }
 
-    onNext(formData)
+    console.log('🏛️ Legal Compliance - Sending data:', dataToSend)
+
+    // Update vendor data before proceeding to next step
+    updateVendorData(dataToSend)
+
+    onNext(dataToSend)
   }
 
   return (
@@ -393,8 +496,10 @@ export default function LegalComplianceStep({
       <Alert className="border-amber-200 bg-amber-50">
         <AlertCircle className="h-4 w-4 text-amber-600" />
         <AlertDescription className="text-amber-800">
-          <strong>Important:</strong> After submitting this step, we will create your Razorpay merchant account. 
-          Please ensure all information is accurate as it cannot be easily changed later.
+          <strong>Important:</strong> {hasRazorpayAccount 
+            ? "Your Razorpay account has already been created. Please verify all information is accurate before proceeding."
+            : "After submitting this step, we will create your Razorpay merchant account. Please ensure all information is accurate as it cannot be easily changed later."
+          }
         </AlertDescription>
       </Alert>
 
@@ -404,11 +509,15 @@ export default function LegalComplianceStep({
         </Button>
         <Button 
           onClick={handleSubmit} 
-          disabled={loading || uploading}
+          disabled={loading || uploading || checkingRazorpayAccount}
           className="gap-2"
         >
-          {loading && <Spinner size={16} variant="white" />}
-          Create Razorpay Account
+          {(loading || checkingRazorpayAccount) && <Spinner size={16} variant="white" />}
+          {checkingRazorpayAccount 
+            ? "Checking Account..." 
+            : hasRazorpayAccount 
+              ? "Proceed" 
+              : "Create Razorpay Account"}
         </Button>
       </div>
     </div>

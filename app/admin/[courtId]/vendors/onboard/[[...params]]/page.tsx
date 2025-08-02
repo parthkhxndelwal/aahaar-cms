@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, ArrowRight, CheckCircle, AlertCircle } from "lucide-react"
+import { ArrowLeft, CheckCircle, AlertCircle } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 
 // Import step components
@@ -18,11 +18,13 @@ import OperatingHoursStep from "./steps/operating-hours"
 import BankDetailsStep from "./steps/bank-details"
 import LegalComplianceStep from "./steps/legal-compliance"
 import AccountCreationStep from "./steps/account-creation"
-import FinalConfigurationStep from "./steps/final-configuration"
+import StakeholderInfoStep from "./steps/stakeholder-info"
+import FinalConfigurationStep from "./steps/final-configuration" 
 import SuccessStep from "./steps/success"
 
 interface VendorOnboardingData {
   id?: string
+  userId?: string // User account ID
   // Basic Details
   stallName: string
   vendorName: string
@@ -61,6 +63,9 @@ interface VendorOnboardingData {
   maxOrdersPerHour: number
   averagePreparationTime: number
   
+  // Temporary data for onboarding
+  tempPassword?: string
+  
   // Onboarding tracking
   onboardingStep?: string
   onboardingStatus?: string
@@ -74,6 +79,7 @@ const STEPS = [
   { key: "bank", title: "Bank Details", component: BankDetailsStep },
   { key: "legal", title: "Legal Compliance", component: LegalComplianceStep },
   { key: "account", title: "Account Creation", component: AccountCreationStep },
+  { key: "stakeholder", title: "Stakeholder Information", component: StakeholderInfoStep },
   { key: "config", title: "Final Configuration", component: FinalConfigurationStep },
   { key: "success", title: "Success", component: SuccessStep },
 ]
@@ -96,6 +102,7 @@ export default function VendorOnboardingPage() {
     cuisineType: "",
     description: "",
     logoUrl: "",
+    userId: "",
     operatingHours: {
       monday: { open: "09:00", close: "18:00", closed: false },
       tuesday: { open: "09:00", close: "18:00", closed: false },
@@ -111,13 +118,14 @@ export default function VendorOnboardingPage() {
     bankName: "",
     panNumber: "",
     gstin: "",
-    businessType: "partnership",
+    businessType: "proprietorship",
     maxOrdersPerHour: 10,
     averagePreparationTime: 15,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [checkingIncompleteOnboarding, setCheckingIncompleteOnboarding] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
 
   // Check for incomplete onboarding when starting new vendor registration
   useEffect(() => {
@@ -207,6 +215,7 @@ export default function VendorOnboardingPage() {
       { step: "bank", isComplete: !!(vendor.bankAccountNumber && vendor.bankIfscCode) }, // Bank details
       { step: "legal", isComplete: !!vendor.panNumber }, // PAN number added
       { step: "account", isComplete: !!vendor.razorpayAccountId }, // Razorpay account created
+      { step: "stakeholder", isComplete: !!(vendor.metadata?.stakeholderId || vendor.metadata?.stakeholderCreated) }, // Stakeholder info added
       { step: "config", isComplete: !!(vendor.maxOrdersPerHour && vendor.averagePreparationTime) }, // Config set
       { step: "success", isComplete: vendor.onboardingStatus === 'completed' || vendor.onboardingStep === 'completed' } // Fully completed
     ]
@@ -250,6 +259,8 @@ export default function VendorOnboardingPage() {
     const stepIndex = STEPS.findIndex(step => step.key === stepParam)
     if (stepIndex !== -1) {
       setCurrentStepIndex(stepIndex)
+      // Reset navigation state when step changes
+      setIsNavigating(false)
     }
   }, [stepParam])
 
@@ -297,8 +308,17 @@ export default function VendorOnboardingPage() {
       const result = await response.json()
       
       if (result.success) {
+        console.log('📊 Loading vendor data from API:', {
+          vendorId: result.data.vendor.id,
+          userId: result.data.vendor.userId,
+          stallName: result.data.vendor.stallName,
+          onboardingStep: result.data.vendor.onboardingStep,
+          onboardingStatus: result.data.vendor.onboardingStatus
+        })
+        
         setVendorData({
           id: result.data.vendor.id,
+          userId: result.data.vendor.userId || "",
           stallName: result.data.vendor.stallName || "",
           vendorName: result.data.vendor.vendorName || "",
           contactEmail: result.data.vendor.contactEmail || "",
@@ -315,7 +335,7 @@ export default function VendorOnboardingPage() {
           bankName: result.data.vendor.bankName || "",
           panNumber: result.data.vendor.panNumber || "",
           gstin: result.data.vendor.gstin || "",
-          businessType: result.data.vendor.metadata?.businessType || "partnership",
+          businessType: result.data.vendor.metadata?.businessType || "proprietorship",
           panDocFileId: result.data.vendor.metadata?.panDocFileId || "",
           maxOrdersPerHour: result.data.vendor.maxOrdersPerHour || 10,
           averagePreparationTime: result.data.vendor.averagePreparationTime || 15,
@@ -339,14 +359,30 @@ export default function VendorOnboardingPage() {
   const getMaxAllowedStepIndex = () => {
     const completedSteps = []
     
+    console.log('🔍 Calculating max allowed step index with vendor data:', {
+      stallName: vendorData.stallName,
+      vendorName: vendorData.vendorName,
+      contactEmail: vendorData.contactEmail,
+      contactPhone: vendorData.contactPhone,
+      userId: vendorData.userId,
+      id: vendorData.id,
+      logoUrl: vendorData.logoUrl
+    })
+    
     // Step 0: Basic Details
     if (vendorData.stallName && vendorData.vendorName && vendorData.contactEmail && vendorData.contactPhone) {
       completedSteps.push(0)
+      console.log('✅ Step 0 (Basic Details) completed')
+    } else {
+      console.log('❌ Step 0 (Basic Details) incomplete')
     }
     
     // Step 1: Password Creation (can only be completed if basic details are done)
-    if (completedSteps.includes(0) && vendorData.id) {
+    if (completedSteps.includes(0) && vendorData.userId) {
       completedSteps.push(1)
+      console.log('✅ Step 1 (Password Creation) completed - userId:', vendorData.userId)
+    } else {
+      console.log('❌ Step 1 (Password Creation) incomplete - userId:', vendorData.userId, 'basicComplete:', completedSteps.includes(0))
     }
     
     // Step 2: Stall Setup (can only be completed if password is done)
@@ -386,7 +422,16 @@ export default function VendorOnboardingPage() {
     
     // Return the next step they need to complete (or current step if already at max)
     const maxCompletedStep = completedSteps.length > 0 ? Math.max(...completedSteps) : -1
-    return Math.min(maxCompletedStep + 1, STEPS.length - 1)
+    const maxAllowedStep = Math.min(maxCompletedStep + 1, STEPS.length - 1)
+    
+    console.log('📊 Step calculation result:', {
+      completedSteps,
+      maxCompletedStep,
+      maxAllowedStep,
+      stepName: STEPS[maxAllowedStep]?.key
+    })
+    
+    return maxAllowedStep
   }
 
   // Check if a specific step is completed based on onboarding step progress
@@ -418,6 +463,7 @@ export default function VendorOnboardingPage() {
       contactEmail: vendorData.contactEmail,
       contactPhone: vendorData.contactPhone,
       id: vendorData.id,
+      userId: vendorData.userId,
       logoUrl: vendorData.logoUrl,
       operatingHours: !!vendorData.operatingHours,
       bankAccountNumber: vendorData.bankAccountNumber,
@@ -440,7 +486,8 @@ export default function VendorOnboardingPage() {
       : `/admin/${courtId}/vendors/onboard/${step.key}`
     
     console.log(`Navigating to: ${url}`)
-    router.push(url)
+    // Use replace instead of push to avoid intermediate page loads
+    router.replace(url)
   }
 
   const saveVendorData = async (stepData: any) => {
@@ -498,11 +545,11 @@ export default function VendorOnboardingPage() {
         console.log('Update vendor response:', result)
         if (!result.success) {
           setError(result.message || "Failed to update vendor")
-          return false
+          return { success: false, vendorId: null }
         }
         
         console.log('Vendor updated successfully')
-        return true
+        return { success: true, vendorId: vendorData.id }
       } else {
         // Create new vendor
         const response = await fetch(`/api/admin/vendors`, {
@@ -517,23 +564,29 @@ export default function VendorOnboardingPage() {
         const result = await response.json()
         if (result.success) {
           // Update local data with created vendor
-          setVendorData(prev => ({ ...prev, id: result.data.vendor.id }))
-          return true
+          const newVendorId = result.data.vendor.id
+          setVendorData(prev => ({ ...prev, id: newVendorId }))
+          return { success: true, vendorId: newVendorId }
         } else {
           setError(result.message || "Failed to create vendor")
-          return false
+          return { success: false, vendorId: null }
         }
       }
     } catch (error) {
       console.error("Save vendor data error:", error)
       setError("Failed to save vendor data")
-      return false
+      return { success: false, vendorId: null }
     } finally {
       setLoading(false)
     }
   }
 
   const goToNextStep = async (stepData?: any) => {
+    // Set navigation state to prevent any intermediate renders
+    setIsNavigating(true)
+    
+    let currentVendorId = vendorData.id
+    
     if (stepData) {
       // Add onboarding tracking information to the step data
       const currentStepKey = STEPS[currentStepIndex].key
@@ -551,17 +604,27 @@ export default function VendorOnboardingPage() {
       
       console.log(`Completing step "${currentStepKey}", setting onboardingStep to "${dataWithOnboardingInfo.onboardingStep}", status to "${dataWithOnboardingInfo.onboardingStatus}"`)
       
-      const saved = await saveVendorData(dataWithOnboardingInfo)
-      if (!saved) return
+      const saveResult = await saveVendorData(dataWithOnboardingInfo)
+      if (!saveResult.success) {
+        setIsNavigating(false)
+        return
+      }
       
-      // Update local vendor data with ALL the step data that was just saved
-      updateVendorData({
-        ...stepData, // Include all the step data
-        onboardingStep: dataWithOnboardingInfo.onboardingStep,
-        onboardingStatus: dataWithOnboardingInfo.onboardingStatus
-      })
+      // Use the vendor ID from the save result (important for new vendors)
+      currentVendorId = saveResult.vendorId
     }
-    goToStep(currentStepIndex + 1)
+    
+    // Navigate immediately with the navigation state still set
+    const nextStepIndex = currentStepIndex + 1
+    if (nextStepIndex < STEPS.length) {
+      const step = STEPS[nextStepIndex]
+      const url = currentVendorId 
+        ? `/admin/${courtId}/vendors/onboard/${step.key}/${currentVendorId}`
+        : `/admin/${courtId}/vendors/onboard/${step.key}`
+      
+      console.log(`Direct navigation to: ${url}`)
+      router.replace(url)
+    }
   }
 
   const goToPrevStep = () => {
@@ -581,7 +644,7 @@ export default function VendorOnboardingPage() {
     } else return completedCount
     
     // Step 1: Password Creation (User account created)
-    if (vendorData.id) {
+    if (vendorData.userId) {
       completedCount++
     } else return completedCount
     
@@ -632,13 +695,15 @@ export default function VendorOnboardingPage() {
   const completedStepsCount = getCompletedStepsCount()
   const progressPercentage = (completedStepsCount / STEPS.length) * 100
 
-  if (loading || checkingIncompleteOnboarding) {
+  if (loading || checkingIncompleteOnboarding || isNavigating) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Spinner size={32} variant="dark" className="mx-auto mb-4" />
           <p className="text-muted-foreground">
-            {checkingIncompleteOnboarding ? "Checking for incomplete onboarding..." : "Loading vendor data..."}
+            {checkingIncompleteOnboarding ? "Checking for incomplete onboarding..." : 
+             isNavigating ? "Navigating to next step..." : 
+             "Initialising... Please Wait"}
           </p>
         </div>
       </div>
@@ -737,29 +802,6 @@ export default function VendorOnboardingPage() {
         onBack={goToPrevStep}
         loading={loading}
       />
-
-      {/* Navigation */}
-      {currentStepIndex < STEPS.length - 1 && (
-        <div className="flex justify-between">
-          <Button
-            variant="outline"
-            onClick={goToPrevStep}
-            disabled={currentStepIndex === 0}
-            className="gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Previous
-          </Button>
-          <Button
-            onClick={goToNextStep}
-            disabled={currentStepIndex === STEPS.length - 1}
-            className="gap-2"
-          >
-            Next
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
     </div>
   )
 }

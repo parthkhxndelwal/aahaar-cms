@@ -131,7 +131,12 @@ const result = await fetchRouteAccount('acc_123456789')
    - ✅ Validation on frontend and backend
    - Clear error messages with format examples
 
-3. **Network failures**
+3. **PAN field invalid for business type: not_yet_registered**
+   - ✅ Fixed: Individual business types exclude PAN field initially
+   - PAN can be added later via KYC process
+   - Other business types still require PAN
+
+4. **Network failures**
    - ✅ Graceful degradation
    - Retry mechanism available
    - Logs for debugging

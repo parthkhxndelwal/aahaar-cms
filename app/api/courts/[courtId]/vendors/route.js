@@ -192,7 +192,7 @@ export async function POST(request, { params }) {
         phone,
         legal_business_name: stallName,
         contact_name: vendorName,
-        business_type: 'individual',
+        business_type: 'proprietorship',
         profile: {
           category: 'food',
           subcategory: 'restaurant',

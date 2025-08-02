@@ -68,80 +68,23 @@ export default function AccountCreationStep({
   const [error, setError] = useState<string>("")
   const [isLinkedAccount, setIsLinkedAccount] = useState(false)
 
+  // Debug logging for account creation initialization
+  useEffect(() => {
+    console.log('💳 Account Creation Step initialized with:', {
+      vendorId,
+      razorpayAccountId: vendorData.razorpayAccountId,
+      accountCreated,
+      isLinkedAccount
+    })
+  }, [])
+
+  // Automatically start account creation when component loads
   useEffect(() => {
     if (vendorId && !accountCreated && !creatingAccount) {
-      // Check if vendor already has a Razorpay account
-      checkExistingAccount()
-    } else if (vendorData.razorpayAccountId && !accountCreated && !creatingAccount) {
-      // If razorpay account ID is already available in vendor data, fetch account details
-      fetchAccountDetails(vendorData.razorpayAccountId)
+      console.log('🚀 Auto-starting Razorpay account creation for vendor:', vendorId)
+      createRazorpayAccount()
     }
-  }, [vendorId, vendorData.razorpayAccountId])
-
-  const fetchAccountDetails = async (accountId: string) => {
-    if (!vendorId) return
-
-    try {
-      const accountResponse = await fetch(`/api/admin/vendors/${vendorId}/razorpay-account`)
-      const accountResult = await accountResponse.json()
-      
-      if (accountResult.success) {
-        setAccountData(accountResult.data.account)
-        setAccountCreated(true)
-        setIsLinkedAccount(true)
-      } else {
-        // If we can't fetch details, show existing account error
-        setError(`Existing Razorpay Account Found (ID: ${accountId}). Choose an option below to proceed.`)
-      }
-    } catch (err) {
-      setError(`Existing Razorpay Account Found (ID: ${accountId}). Choose an option below to proceed.`)
-    }
-  }
-
-  const checkExistingAccount = async () => {
-    if (!vendorId) return
-
-    try {
-      const response = await fetch(`/api/admin/vendors/${vendorId}`)
-      const result = await response.json()
-
-      if (result.success && result.data.vendor.razorpayAccountId) {
-        // Vendor already has an account, try to fetch its details
-        try {
-          const accountResponse = await fetch(`/api/admin/vendors/${vendorId}/razorpay-account`)
-          const accountResult = await accountResponse.json()
-          
-          if (accountResult.success) {
-            setAccountData(accountResult.data.account)
-            setAccountCreated(true)
-            setIsLinkedAccount(true)
-            // Update local vendor data if account was newly linked
-            if (accountResult.data.linked) {
-              updateVendorData({
-                razorpayAccountId: accountResult.data.account.id,
-                metadata: {
-                  ...vendorData.metadata,
-                  razorpayAccountData: accountResult.data.account,
-                  onboardingCompleted: true,
-                }
-              })
-            }
-          } else {
-            // Account ID exists but can't fetch details, show existing account info
-            setError(`Existing Razorpay Account Found (ID: ${result.data.vendor.razorpayAccountId}). Choose an option below to proceed.`)
-          }
-        } catch (err) {
-          setError(`Existing Razorpay Account Found (ID: ${result.data.vendor.razorpayAccountId}). Choose an option below to proceed.`)
-        }
-      } else {
-        // No existing account, create new one
-        createRazorpayAccount()
-      }
-    } catch (error) {
-      console.error("Error checking existing account:", error)
-      setError("Failed to check existing account status")
-    }
-  }
+  }, [vendorId, accountCreated, creatingAccount])
 
   const createRazorpayAccount = async () => {
     if (!vendorId) return
@@ -167,14 +110,38 @@ export default function AccountCreationStep({
       if (result.success) {
         setAccountData(result.data.account)
         setAccountCreated(true)
-        updateVendorData({
+        
+        // Update local state
+        const updatedData = {
           razorpayAccountId: result.data.account.id,
           metadata: {
             ...vendorData.metadata,
             razorpayAccountData: result.data.account,
             onboardingCompleted: true,
           }
-        })
+        }
+        updateVendorData(updatedData)
+        
+        // Also persist to backend immediately
+        try {
+          const updateResponse = await fetch(`/api/admin/vendors/${vendorId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...updatedData,
+              courtId
+            })
+          })
+          
+          const updateResult = await updateResponse.json()
+          if (!updateResult.success) {
+            console.error('Failed to persist Razorpay account ID to backend:', updateResult.message)
+          } else {
+            console.log('✅ Razorpay account ID successfully persisted to backend')
+          }
+        } catch (updateError) {
+          console.error('Error persisting Razorpay account ID to backend:', updateError)
+        }
       } else {
         setError(result.message || "Failed to create Razorpay account")
       }
@@ -182,44 +149,6 @@ export default function AccountCreationStep({
       console.error("Account creation error:", error)
       setError("Network error. Please check your connection and try again.")
     } finally {
-      setCreatingAccount(false)
-    }
-  }
-
-  const resetRazorpayAccount = async () => {
-    if (!vendorId) return
-
-    setCreatingAccount(true)
-    setError("")
-
-    try {
-      // First, clear the existing Razorpay account ID from the vendor
-      const response = await fetch(`/api/admin/vendors/${vendorId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          razorpayAccountId: null,
-          metadata: {
-            ...vendorData.metadata,
-            razorpayAccountData: null,
-          }
-        }),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        // Now create a new account
-        createRazorpayAccount()
-      } else {
-        setError("Failed to reset existing account. Please try again.")
-        setCreatingAccount(false)
-      }
-    } catch (error) {
-      console.error("Account reset error:", error)
-      setError("Network error while resetting account.")
       setCreatingAccount(false)
     }
   }
@@ -262,99 +191,43 @@ export default function AccountCreationStep({
   }
 
   if (error) {
-    const isExistingAccountError = error.includes("Existing Razorpay Account Found")
-    
     return (
       <div className="space-y-6">
-        <Alert variant={isExistingAccountError ? "default" : "destructive"}>
+        <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            <strong>
-              {isExistingAccountError ? "Existing Account Detected:" : "Account Creation Failed:"}
-            </strong> {error}
+            <strong>Account Creation Failed:</strong> {error}
           </AlertDescription>
         </Alert>
 
-        {isExistingAccountError ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>What would you like to do?</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3">
-                <div className="p-4 border rounded-lg">
-                  <h4 className="font-medium mb-2">Option 1: View Existing Account</h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Fetch and display the current Razorpay account details to see what's different.
-                  </p>
-                  <Button 
-                    variant="outline" 
-                    onClick={checkExistingAccount}
-                    disabled={creatingAccount}
-                  >
-                    {creatingAccount ? (
-                      <>
-                        <Spinner size={16} variant="dark" className="mr-2" />
-                        Loading...
-                      </>
-                    ) : (
-                      "View Existing Account"
-                    )}
-                  </Button>
-                </div>
-                
-                <div className="p-4 border rounded-lg">
-                  <h4 className="font-medium mb-2">Option 2: Reset & Create New</h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Clear the existing account reference and create a new Razorpay account with current vendor details.
-                  </p>
-                  <Button 
-                    onClick={resetRazorpayAccount}
-                    disabled={creatingAccount}
-                    variant="destructive"
-                  >
-                    {creatingAccount ? (
-                      <>
-                        <Spinner size={16} variant="white" className="mr-2" />
-                        Resetting...
-                      </>
-                    ) : (
-                      "Reset & Create New Account"
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={onBack}>
-              Back to Previous Step
-            </Button>
-            <Button onClick={createRazorpayAccount} disabled={creatingAccount}>
-              {creatingAccount ? (
-                <>
-                  <Spinner size={16} variant="white" className="mr-2" />
-                  Retrying...
-                </>
-              ) : (
-                "Try Again"
-              )}
-            </Button>
-          </div>
-        )}
+        <div className="flex justify-between">
+          <Button variant="outline" onClick={onBack}>
+            Back to Previous Step
+          </Button>
+          <Button onClick={createRazorpayAccount} disabled={creatingAccount}>
+            {creatingAccount ? (
+              <>
+                <Spinner size={16} variant="white" className="mr-2" />
+                Retrying...
+              </>
+            ) : (
+              "Try Again"
+            )}
+          </Button>
+        </div>
       </div>
     )
   }
 
   if (!accountCreated || !accountData) {
+    // Account is being created or not yet created, show loading state
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
-        <AlertCircle className="h-12 w-12 text-yellow-600" />
-        <h3 className="text-lg font-semibold">Account creation in progress...</h3>
-        <Button onClick={createRazorpayAccount} disabled={creatingAccount}>
-          Create Account
-        </Button>
+        <Spinner size={48} variant="dark" />
+        <h3 className="text-lg font-semibold">Creating your Razorpay account...</h3>
+        <p className="text-muted-foreground text-center max-w-md">
+          We're setting up your payment processing account. This may take a few moments.
+        </p>
       </div>
     )
   }
@@ -566,7 +439,7 @@ export default function AccountCreationStep({
           console.log('Account data status:', accountData?.status)
           onNext(dataToSend)
         }} className="gap-2">
-          Continue Setup
+          {isLinkedAccount ? "Proceed" : "Continue Setup"}
         </Button>
       </div>
     </div>

@@ -44,6 +44,9 @@ interface Vendor {
   metadata?: {
     onboardingCompleted?: boolean
     onboardingStep?: string
+    stakeholderId?: string
+    stakeholderCreated?: boolean
+    stakeholderData?: any
   }
   createdAt: string
   updatedAt: string
@@ -108,8 +111,9 @@ export default function VendorsPage() {
       { key: "bank", number: 5, title: "Bank Details" },
       { key: "legal", number: 6, title: "Legal Compliance" },
       { key: "account", number: 7, title: "Account Creation" },
-      { key: "config", number: 8, title: "Final Configuration" },
-      { key: "success", number: 9, title: "Complete" }
+      { key: "stakeholder", number: 8, title: "Stakeholder Information" },
+      { key: "config", number: 9, title: "Final Configuration" },
+      { key: "success", number: 10, title: "Complete" }
     ]
     
     const step = steps.find(s => s.key === stepKey) || steps[0]
@@ -149,6 +153,7 @@ export default function VendorsPage() {
       { step: "bank", isComplete: !!(vendor.bankAccountNumber && vendor.bankIfscCode) }, // Bank details
       { step: "legal", isComplete: !!vendor.panNumber }, // PAN number added
       { step: "account", isComplete: !!vendor.razorpayAccountId }, // Razorpay account created
+      { step: "stakeholder", isComplete: !!(vendor.metadata?.stakeholderId || vendor.metadata?.stakeholderCreated) }, // Stakeholder info added
       { step: "config", isComplete: !!(vendor.maxOrdersPerHour && vendor.averagePreparationTime) }, // Config set
       { step: "success", isComplete: vendor.onboardingStatus === 'completed' } // Fully completed
     ]

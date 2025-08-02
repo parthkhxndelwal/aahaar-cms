@@ -52,6 +52,26 @@ export default function BankDetailsStep({
   const [validatingIfsc, setValidatingIfsc] = useState(false)
   const [ifscValid, setIfscValid] = useState<boolean | null>(null)
 
+  // Debug logging for bank details initialization
+  useEffect(() => {
+    console.log('🏦 Bank Details Step initialized with:', {
+      bankAccountHolderName: formData.bankAccountHolderName,
+      bankAccountNumber: formData.bankAccountNumber,
+      bankIfscCode: formData.bankIfscCode,
+      bankName: formData.bankName,
+      ifscValid,
+      validatingIfsc
+    })
+  }, [])
+
+  // Validate IFSC code when component mounts with pre-filled data
+  useEffect(() => {
+    if (formData.bankIfscCode && formData.bankIfscCode.length === 11 && ifscValid === null && !validatingIfsc) {
+      console.log('Auto-validating pre-filled IFSC code:', formData.bankIfscCode)
+      validateIfsc(formData.bankIfscCode)
+    }
+  }, [formData.bankIfscCode, ifscValid, validatingIfsc])
+
   // Remove the problematic useEffect that was causing infinite re-renders
   // useEffect(() => {
   //   updateVendorData(formData)
@@ -317,7 +337,7 @@ export default function BankDetailsStep({
         </Button>
         <Button 
           onClick={handleSubmit} 
-          disabled={loading || validatingIfsc || !ifscValid}
+          disabled={loading || validatingIfsc || ifscValid !== true}
           className="gap-2"
         >
           {loading && <Spinner size={16} variant="white" />}
