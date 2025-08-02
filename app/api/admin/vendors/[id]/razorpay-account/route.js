@@ -13,6 +13,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ success: false, message: "Vendor not found" }, { status: 404 })
     }
 
+    // Check if account creation is already in progress or completed
     if (vendor.razorpayAccountId) {
       console.log(`[RAZORPAY ACCOUNT] Vendor ${id} already has Razorpay account: ${vendor.razorpayAccountId}`)
       
@@ -81,6 +82,15 @@ export async function POST(request, { params }) {
       }
     }
 
+    // Check for race condition - if account creation is in progress
+    if (vendor.metadata?.razorpayAccountCreating === true) {
+      console.log(`[RAZORPAY ACCOUNT] Account creation already in progress for vendor ${id}, rejecting duplicate request`)
+      return NextResponse.json({ 
+        success: false, 
+        message: "Account creation already in progress" 
+      }, { status: 409 })
+    }
+
     const { 
       businessType, 
       panDocFileId,
@@ -96,6 +106,14 @@ export async function POST(request, { params }) {
       gstin: vendor.gstin,
       businessType,
       existingRazorpayAccountId: vendor.razorpayAccountId
+    })
+
+    // Set creation in progress flag to prevent race conditions
+    await vendor.update({
+      metadata: {
+        ...vendor.metadata,
+        razorpayAccountCreating: true
+      }
     })
 
     // Prepare data for Razorpay account creation
@@ -130,6 +148,15 @@ export async function POST(request, { params }) {
 
     if (!result.success) {
       console.log(`[RAZORPAY ACCOUNT] Account creation failed for vendor ${id}:`, result.error)
+      
+      // Clear the creation flag on failure
+      await vendor.update({
+        metadata: {
+          ...vendor.metadata,
+          razorpayAccountCreating: false
+        }
+      })
+      
       return NextResponse.json({
         success: false,
         message: result.error || "Failed to create Razorpay account",

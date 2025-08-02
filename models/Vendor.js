@@ -229,7 +229,7 @@ module.exports = (sequelize, DataTypes) => {
         comment: "Current onboarding status"
       },
       onboardingStep: {
-        type: DataTypes.ENUM("basic", "password", "stall", "hours", "bank", "legal", "account", "config", "success", "completed"),
+        type: DataTypes.ENUM("basic", "password", "stall", "hours", "bank", "legal", "account", "stakeholder", "config", "success", "completed"),
         allowNull: true,
         comment: "Current step in onboarding process"
       },

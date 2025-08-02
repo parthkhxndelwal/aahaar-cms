@@ -69,6 +69,9 @@ interface VendorOnboardingData {
   // Onboarding tracking
   onboardingStep?: string
   onboardingStatus?: string
+  
+  // Metadata field to store additional vendor information
+  metadata?: any
 }
 
 const STEPS = [
@@ -121,6 +124,7 @@ export default function VendorOnboardingPage() {
     businessType: "proprietorship",
     maxOrdersPerHour: 10,
     averagePreparationTime: 15,
+    metadata: {},
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -313,7 +317,11 @@ export default function VendorOnboardingPage() {
           userId: result.data.vendor.userId,
           stallName: result.data.vendor.stallName,
           onboardingStep: result.data.vendor.onboardingStep,
-          onboardingStatus: result.data.vendor.onboardingStatus
+          onboardingStatus: result.data.vendor.onboardingStatus,
+          metadata: result.data.vendor.metadata,
+          razorpayAccountId: result.data.vendor.razorpayAccountId,
+          hasMetadata: !!result.data.vendor.metadata,
+          metadataKeys: result.data.vendor.metadata ? Object.keys(result.data.vendor.metadata) : []
         })
         
         setVendorData({
@@ -341,6 +349,7 @@ export default function VendorOnboardingPage() {
           averagePreparationTime: result.data.vendor.averagePreparationTime || 15,
           onboardingStep: result.data.vendor.onboardingStep || "basic",
           onboardingStatus: result.data.vendor.onboardingStatus || "in_progress",
+          metadata: result.data.vendor.metadata || {},
         })
       }
     } catch (error) {
@@ -410,14 +419,19 @@ export default function VendorOnboardingPage() {
       completedSteps.push(6)
     }
     
-    // Step 7: Final Configuration (can only be completed if account creation is done)
-    if (completedSteps.includes(6) && vendorData.maxOrdersPerHour && vendorData.averagePreparationTime) {
+    // Step 7: Stakeholder Information (can only be completed if account creation is done)
+    if (completedSteps.includes(6)) {
       completedSteps.push(7)
     }
     
-    // Step 8: Success (can only be completed if final configuration is done)
-    if (completedSteps.includes(7)) {
+    // Step 8: Final Configuration (can only be completed if stakeholder step is done)
+    if (completedSteps.includes(7) && vendorData.maxOrdersPerHour && vendorData.averagePreparationTime) {
       completedSteps.push(8)
+    }
+    
+    // Step 9: Success (can only be completed if final configuration is done)
+    if (completedSteps.includes(8)) {
+      completedSteps.push(9)
     }
     
     // Return the next step they need to complete (or current step if already at max)
@@ -668,9 +682,9 @@ export default function VendorOnboardingPage() {
       completedCount++
     } else return completedCount
     
-    // Step 6: Account Creation (Razorpay account - we'll check this via API or assume completed if we reach config)
+    // Step 6: Account Creation (Razorpay account - we'll check this via API or assume completed if we reach stakeholder/config)
     if (vendorData.onboardingStep && 
-        ['config', 'success'].includes(vendorData.onboardingStep)) {
+        ['stakeholder', 'config', 'success'].includes(vendorData.onboardingStep)) {
       completedCount++
     } else if (vendorData.onboardingStatus === 'completed') {
       completedCount++
@@ -679,12 +693,23 @@ export default function VendorOnboardingPage() {
       return completedCount
     } else return completedCount
     
-    // Step 7: Final Configuration
+    // Step 7: Stakeholder Information (can check if we have stakeholder data or moved past this step)
+    if (vendorData.onboardingStep && 
+        ['config', 'success'].includes(vendorData.onboardingStep)) {
+      completedCount++
+    } else if (vendorData.onboardingStatus === 'completed') {
+      completedCount++
+    } else if (vendorData.onboardingStep === 'stakeholder') {
+      // If we're currently on the stakeholder step, don't count it as completed yet
+      return completedCount
+    } else return completedCount
+    
+    // Step 8: Final Configuration
     if (vendorData.maxOrdersPerHour && vendorData.averagePreparationTime) {
       completedCount++
     } else return completedCount
     
-    // Step 8: Success (Fully completed)
+    // Step 9: Success (Fully completed)
     if (vendorData.onboardingStatus === 'completed') {
       completedCount++
     }
