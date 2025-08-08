@@ -173,10 +173,12 @@ export default function AdminOrdersPage({ params }: { params: Promise<{ courtId:
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex items-center justify-center py-20"
+            className="flex items-center justify-center min-h-[400px]"
           >
             <div className="text-center">
-              <Spinner size={32} variant="white" className="mb-4" />
+              <div className="flex justify-center mb-4">
+                <Spinner size={32} variant="white" />
+              </div>
               <p className="text-neutral-400">Loading orders data...</p>
             </div>
           </motion.div>
@@ -205,7 +207,10 @@ export default function AdminOrdersPage({ params }: { params: Promise<{ courtId:
           },
           { 
             title: "Total Revenue", 
-            value: `₹${orders.filter(o => o.status === "completed").reduce((sum, o) => sum + Number(o.totalAmount || 0), 0).toFixed(2)}`, 
+            value: `₹${orders.filter(o => o.status === "completed").reduce((sum, o) => {
+              const amount = Number(o.totalAmount || 0);
+              return sum + amount;
+            }, 0).toFixed(2)}`, 
             subtitle: "Current page" 
           },
           { 

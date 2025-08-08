@@ -1,46 +1,36 @@
 import Image from "next/image"
-import { motion } from "framer-motion"
 
 interface SpinnerProps {
   size?: number
-  variant?: "dark" | "white"
+  variant?: "dark" | "white" | "light"
   className?: string
-  animate?: boolean
 }
 
 export function Spinner({ 
   size = 24, 
   variant = "dark", 
-  className = "",
-  animate = true 
+  className = ""
 }: SpinnerProps) {
-  const spinnerSrc = variant === "white" ? "/Spinner_white_275x275.svg" : "/Spinner_dark_275x275.svg"
-  
-  if (animate) {
-    return (
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ 
-          duration: 1, 
-          repeat: Infinity, 
-          ease: "linear" 
-        }}
-        className={className}
-      >
-        <Image
-          src={spinnerSrc}
-          alt="Loading..."
-          width={size}
-          height={size}
-          priority
-        />
-      </motion.div>
-    )
+  // Map variants to appropriate spinner files
+  // For dark backgrounds, use white spinner (visible on dark)
+  // For light backgrounds, use dark spinner (visible on light)
+  const getSpinnerSrc = () => {
+    switch (variant) {
+      case "dark":
+        // Dark variant = for dark backgrounds, so use white spinner
+        return "/Spinner_white_275x275.svg"
+      case "white":
+      case "light":
+        // White/light variant = for light backgrounds, so use dark spinner
+        return "/Spinner_dark_275x275.svg"
+      default:
+        return "/Spinner_dark_275x275.svg"
+    }
   }
   
   return (
     <Image
-      src={spinnerSrc}
+      src={getSpinnerSrc()}
       alt="Loading..."
       width={size}
       height={size}

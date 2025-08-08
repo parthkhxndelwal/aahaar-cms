@@ -161,23 +161,6 @@ export default function AdminUsersPage() {
     totalSpent: users.reduce((sum, u) => sum + (Number(u.totalSpent) || 0), 0)
   }
 
-  if (loading) {
-    return (
-      <motion.div
-        key="loading"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="flex items-center justify-center py-20"
-      >
-        <div className="text-center">
-          <Spinner size={32} variant="white" className="mb-4" />
-          <p className="text-neutral-400">Loading users data...</p>
-        </div>
-      </motion.div>
-    )
-  }
-
   return (
     <motion.div 
       className="space-y-6"
@@ -219,10 +202,12 @@ export default function AdminUsersPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex items-center justify-center py-20"
+            className="flex items-center justify-center min-h-[400px]"
           >
             <div className="text-center">
-              <Spinner size={32} variant="white" className="mb-4" />
+              <div className="flex justify-center mb-4">
+                <Spinner size={32} variant="white" />
+              </div>
               <p className="text-neutral-400">Loading users data...</p>
             </div>
           </motion.div>
@@ -410,7 +395,7 @@ export default function AdminUsersPage() {
                                     disabled={updatingUser === user.id}
                                   >
                                     {updatingUser === user.id ? (
-                                      <Spinner size={16} variant="dark" />
+                                      <Spinner size={16} variant="white" />
                                     ) : (
                                       <Ban className="h-4 w-4" />
                                     )}
@@ -423,7 +408,7 @@ export default function AdminUsersPage() {
                                     disabled={updatingUser === user.id}
                                   >
                                     {updatingUser === user.id ? (
-                                      <Spinner size={16} variant="dark" />
+                                      <Spinner size={16} variant="white" />
                                     ) : (
                                       <CheckCircle className="h-4 w-4" />
                                     )}

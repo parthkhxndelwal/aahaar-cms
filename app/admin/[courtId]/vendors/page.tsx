@@ -384,7 +384,7 @@ export default function VendorsPage() {
                     setButtonLoading('create-first-vendor')
                     router.push(`/admin/${courtId}/vendors/onboard`)
                   }}
-                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                  className="gap-2 bg-neutral-400 hover:bg-neutral-300 text-black"
                 >
                   {buttonLoading === 'create-first-vendor' ? (
                     <Spinner size={16} variant="white" />

@@ -20,13 +20,9 @@ export function AnimatedLoading({
       transition={{ duration: 0.3 }}
       className={`flex flex-col items-center justify-center py-12 ${className}`}
     >
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-        className="mb-4"
-      >
-        <Spinner size={size} variant="white" />
-      </motion.div>
+      <div className="mb-4">
+        <Spinner size={size} variant="dark" />
+      </div>
       <motion.p
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
