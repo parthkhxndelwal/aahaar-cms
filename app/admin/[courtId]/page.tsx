@@ -94,8 +94,6 @@ export default function AdminDashboard({ params }: { params: Promise<{ courtId: 
     switch (status) {
       case "pending":
         return "bg-yellow-100 text-yellow-800"
-      case "confirmed":
-        return "bg-blue-100 text-blue-800"
       case "preparing":
         return "bg-orange-100 text-orange-800"
       case "ready":

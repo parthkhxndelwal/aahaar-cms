@@ -15,6 +15,33 @@ export async function POST(request, { params }) {
     const { courtId } = await params
     const { paymentMethod = "online", specialInstructions = "" } = await request.json()
 
+    // Check for active orders before allowing checkout
+    const activeOrders = await Order.findAll({
+      where: {
+        userId: user.id,
+        courtId,
+        status: {
+          [Op.notIn]: ['completed', 'rejected', 'cancelled']
+        }
+      },
+      attributes: ['id', 'orderNumber', 'status']
+    })
+
+    if (activeOrders.length > 0) {
+      console.log(`❌ [Checkout] User ${user.id} has ${activeOrders.length} active orders, blocking checkout`)
+      return NextResponse.json(
+        {
+          success: false,
+          message: "You have an active order. Please wait for it to complete before placing a new order.",
+          activeOrders: activeOrders.map(order => ({
+            orderNumber: order.orderNumber,
+            status: order.status
+          }))
+        },
+        { status: 400 }
+      )
+    }
+
     // Get user's cart items
     const cart = await Cart.findOne({
       where: { userId: user.id, courtId },

@@ -481,7 +481,7 @@ function OTPDrawer({ isOpen, onClose, emailOTP, phoneOTP, newEmail, newPhone, on
 
 export default function ProfileSettingsPage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
-  const { token, isAuthenticated, loading: authLoading } = useAppAuth()
+  const { token, isAuthenticated, loading: authLoading, refreshUser } = useAppAuth()
   
   const [profileData, setProfileData] = useState<ProfileData>({
     fullName: "",
@@ -714,8 +714,13 @@ export default function ProfileSettingsPage({ params }: { params: Promise<{ cour
           // Update original data to reflect the new saved state
           setOriginalData(updatedProfileData)
           
+          // Refresh user data in auth context
+          await refreshUser()
+          
           // Close crop drawer
           setCropDrawer({ isOpen: false, imageUrl: '', isLoading: false })
+          
+          console.log('✅ Profile picture saved and user context refreshed')
         } else {
           console.error('Failed to save profile picture:', saveData.message)
           alert('Failed to save profile picture. Please try again.')
@@ -805,6 +810,11 @@ export default function ProfileSettingsPage({ params }: { params: Promise<{ cour
       if (data.success) {
         // Update original data to reflect the new saved state
         setOriginalData({ ...profileData })
+        
+        // Refresh user data in auth context to update home page display
+        await refreshUser()
+        
+        console.log('✅ Profile saved and user context refreshed')
       } else {
         console.error('Failed to save profile:', data.message)
       }

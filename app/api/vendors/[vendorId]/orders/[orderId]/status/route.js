@@ -11,7 +11,7 @@ export async function PATCH(request, { params }) {
 
     const { user } = authResult
     const { vendorId, orderId } = await params
-    const { action, otp } = await request.json() // action: 'start_preparing' | 'mark_ready' | 'complete'
+    const { action, otp } = await request.json() // action: 'mark_ready' | 'complete'
 
     // Check permissions
     if (user.role === "vendor") {
@@ -42,18 +42,6 @@ export async function PATCH(request, { params }) {
     let message
 
     switch (action) {
-      case "start_preparing":
-        if (order.status !== "accepted") {
-          return NextResponse.json(
-            { success: false, message: "Order must be in accepted status to start preparing" },
-            { status: 400 }
-          )
-        }
-        newStatus = "preparing"
-        updateData.preparingAt = new Date()
-        message = "Order preparation started"
-        break
-
       case "mark_ready":
         if (order.status !== "preparing") {
           return NextResponse.json(
@@ -115,7 +103,7 @@ export async function PATCH(request, { params }) {
     // Get updated section counts for the vendor
     const sectionCounts = await Promise.all([
       Order.count({ where: { vendorId, status: "pending" } }),
-      Order.count({ where: { vendorId, status: { [Op.in]: ["accepted", "preparing"] } } }),
+      Order.count({ where: { vendorId, status: "preparing" } }),
       Order.count({ where: { vendorId, status: "ready" } }),
     ])
 
@@ -151,9 +139,7 @@ export async function PATCH(request, { params }) {
 
     // Determine which section the order belongs to now
     let targetSection
-    if (newStatus === "preparing") {
-      targetSection = "queue"
-    } else if (newStatus === "ready") {
+    if (newStatus === "ready") {
       targetSection = "ready"
     } else if (newStatus === "completed") {
       targetSection = null // Order will be removed from all sections

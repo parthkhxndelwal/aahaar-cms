@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useVendorAuth } from "@/contexts/vendor-auth-context"
+import { useSocketConnection } from "@/contexts/socket-connection-context"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { useVendorOrders } from "@/hooks/use-vendor-orders"
@@ -69,6 +70,7 @@ interface QueueData {
 export default function VendorQueuePage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
   const { user, token } = useVendorAuth()
+  const { isConnected, error: socketError, retryConnection } = useSocketConnection()
   const router = useRouter()
   
   const [vendorId, setVendorId] = useState<string>("")
@@ -227,7 +229,6 @@ export default function VendorQueuePage({ params }: { params: Promise<{ courtId:
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400"
-      case "accepted": return "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400"
       case "preparing": return "bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400"
       case "ready": return "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
       case "completed": return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400"
@@ -252,7 +253,7 @@ export default function VendorQueuePage({ params }: { params: Promise<{ courtId:
             <span className="font-bold text-lg">{order.orderNumber}</span>
           </div>
           <Badge className={getStatusColor(order.status)}>
-            {order.status === "accepted" ? "In Queue" : order.status}
+            {order.status === "preparing" ? "In Queue" : order.status}
           </Badge>
         </div>
         
@@ -347,21 +348,6 @@ export default function VendorQueuePage({ params }: { params: Promise<{ courtId:
           </>
         )}
 
-        {order.status === "accepted" && (
-          <Button
-            onClick={() => handleOrderAction(order.id, "start_preparing")}
-            disabled={actionLoading === order.id}
-            className="flex-1 bg-orange-600 hover:bg-orange-700"
-          >
-            {actionLoading === order.id ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-            Start Preparing
-          </Button>
-        )}
-
         {order.status === "preparing" && (
           <Button
             onClick={() => handleOrderAction(order.id, "mark_ready")}
@@ -420,10 +406,44 @@ export default function VendorQueuePage({ params }: { params: Promise<{ courtId:
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6">
-          <h1 className="text-2xl font-bold mb-2">Order Queue Management</h1>
-          <p className="text-neutral-600 dark:text-neutral-400">
-            Manage your incoming orders and track their progress
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold mb-2">Order Queue Management</h1>
+              <p className="text-neutral-600 dark:text-neutral-400">
+                Manage your incoming orders and track their progress
+              </p>
+            </div>
+            
+            {/* Socket Connection Status */}
+            <div className="flex items-center gap-2">
+              {isConnected ? (
+                <div className="flex items-center gap-2 text-green-600 bg-green-50 dark:bg-green-900/20 px-3 py-1 rounded-full">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium">Real-time Connected</span>
+                </div>
+              ) : socketError ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-1 rounded-full">
+                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                    <span className="text-sm font-medium">Connection Failed</span>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={retryConnection}
+                    className="text-xs"
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 px-3 py-1 rounded-full">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium">Connecting...</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Queue Tabs */}
@@ -503,7 +523,7 @@ export default function VendorQueuePage({ params }: { params: Promise<{ courtId:
               <div className="text-center py-12">
                 <Package className="h-12 w-12 mx-auto mb-4 text-neutral-400" />
                 <div className="text-lg font-medium">No orders in queue</div>
-                <div className="text-neutral-500">Accepted orders will appear here</div>
+                <div className="text-neutral-500">Orders being prepared will appear here</div>
               </div>
             ) : (
               <div className="space-y-4">

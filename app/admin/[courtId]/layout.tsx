@@ -41,11 +41,11 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="dark flex h-screen">
+    <div className="dark flex h-screen w-screen overflow-hidden fixed inset-0">
       <AdminSidebar courtId={courtId} />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* <AdminHeader /> */}
-        <main className="flex-1 overf low-x-hidden overflow-y-auto p-6 dark:bg-neutral-950">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6 dark:bg-neutral-950">{children}</main>
       </div>
     </div>
   )

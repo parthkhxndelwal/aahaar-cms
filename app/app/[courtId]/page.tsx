@@ -15,6 +15,10 @@ interface MenuItem {
   imageUrl?: string
   vendorId: string
   category: string
+  hasStock?: boolean
+  stockQuantity?: number
+  stockUnit?: string
+  status?: string
   vendor?: {
     stallName: string
     cuisineType: string
@@ -35,10 +39,38 @@ export default function HomePage({ params }: { params: Promise<{ courtId: string
     
     if (!user || !token) {
       console.log('🚪 [HomePage] No auth, redirecting to login')
-      router.push(`/app/${courtId}/login`)
+      router.replace(`/app/${courtId}/login`)
       return
     }
   }, [user, token, courtId, router, authLoading])
+
+  // Show loading while checking authentication or fetching data
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 mx-auto mb-4"></div>
+          <p className="text-neutral-600 dark:text-neutral-400">
+            Checking authentication...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Redirect to login if not authenticated - don't render anything
+  if (!user || !token) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 mx-auto mb-4"></div>
+          <p className="text-neutral-600 dark:text-neutral-400">
+            Redirecting to login...
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   useEffect(() => {
     if (!user || !token || authLoading) return
@@ -61,20 +93,6 @@ export default function HomePage({ params }: { params: Promise<{ courtId: string
 
     fetchHotItems()
   }, [courtId, user, token, authLoading])
-
-  // Show loading while checking authentication or fetching data
-  if (authLoading || (!user || !token)) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 mx-auto mb-4"></div>
-          <p className="text-neutral-600 dark:text-neutral-400">
-            {authLoading ? "Checking authentication..." : "Loading..."}
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-6 pb-24">
@@ -110,41 +128,67 @@ export default function HomePage({ params }: { params: Promise<{ courtId: string
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.2 }}
+        className="relative"
       >
         <h2 className="text-xl font-bold text-black dark:text-white mb-4">
           🔥 Hot right now
         </h2>
         
         {loading ? (
-          <div className="grid grid-cols-3 gap-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-neutral-200 dark:bg-neutral-800 rounded-2xl h-48 animate-pulse"></div>
+          <div className="flex gap-3 overflow-x-hidden">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-neutral-200 dark:bg-neutral-800 rounded-2xl h-48 min-w-[150px] flex-shrink-0 animate-pulse"></div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            {hotItems.map((item, index) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ 
-                  duration: 0.3, 
-                  delay: 0.1 * index,
-                  type: "spring",
-                  stiffness: 300
-                }}
-              >
-                <ProductCard
-                  id={item.id}
-                  name={item.name}
-                  description={item.description}
-                  price={item.price}
-                  mrp={item.mrp}
-                  imageUrl={item.imageUrl}
-                />
-              </motion.div>
-            ))}
+          <div className="relative -mx-4">
+            <div 
+              className="flex gap-3 overflow-x-auto scrollbar-hide scroll-smooth pb-2 px-4" 
+              style={{ 
+                scrollbarWidth: 'none', 
+                msOverflowStyle: 'none',
+                touchAction: 'pan-x'
+              }}
+            >
+              {hotItems.map((item, index) => (
+                <motion.div
+                  key={item.id}
+                  className={`min-w-[150px] max-w-[150px] flex-shrink-0 ${
+                    index === 0 ? 'ml-4' : ''
+                  } ${
+                    index === hotItems.length - 1 ? 'mr-4' : ''
+                  }`}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ 
+                    duration: 0.3, 
+                    delay: 0.1 * index,
+                    type: "spring",
+                    stiffness: 300
+                  }}
+                >
+                  <ProductCard
+                    id={item.id}
+                    name={item.name}
+                    description={item.description}
+                    price={item.price}
+                    mrp={item.mrp}
+                    imageUrl={item.imageUrl}
+                    hasStock={item.hasStock}
+                    stockQuantity={item.stockQuantity}
+                    stockUnit={item.stockUnit}
+                    status={item.status as 'active' | 'inactive' | 'out_of_stock'}
+                    className="h-full"
+                  />
+                </motion.div>
+              ))}
+              {/* Add padding element at the end for better scroll experience */}
+              <div className="min-w-[1px] flex-shrink-0"></div>
+            </div>
+            
+            {/* Gradient fade effects for scroll indication - positioned to match the scrollable area exactly */}
+            <div className="absolute top-0 left-0 w-8 h-full bg-gradient-to-r from-white dark:from-neutral-950 to-transparent pointer-events-none z-10"></div>
+            <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-white dark:from-neutral-950 to-transparent pointer-events-none z-10"></div>
           </div>
         )}
       </motion.div>

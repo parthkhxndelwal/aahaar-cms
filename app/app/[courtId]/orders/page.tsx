@@ -16,6 +16,7 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [activeOrderIds, setActiveOrderIds] = useState<string[]>([])
+  const [cancellingOrders, setCancellingOrders] = useState<Set<string>>(new Set())
 
   // Use the socket hook for real-time updates
   const { 
@@ -23,6 +24,7 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
     lastUpdate, 
     updateOrderSummaries,
     getActiveOrderIds,
+    cancelOrder,
     isConnected: socketConnected,
     connectionError: socketError 
   } = useUserOrders(user?.id || null, activeOrderIds)
@@ -33,7 +35,7 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
   // Update active order IDs when order summaries change
   useEffect(() => {
     const newActiveOrderIds = orderSummaries
-      .filter(summary => !['completed', 'rejected'].includes(summary.overallStatus))
+      .filter(summary => !['completed', 'rejected', 'cancelled'].includes(summary.overallStatus))
       .map(summary => summary.parentOrderId)
     
     setActiveOrderIds(newActiveOrderIds)
@@ -112,6 +114,8 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
       case "partial": return "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400"
       case "ready": return "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
       case "completed": return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400"
+      case "cancelled": return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400"
+      case "rejected": return "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"
       default: return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400"
     }
   }
@@ -122,12 +126,46 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
       case "partial": return "Partially Ready"
       case "ready": return "Ready for Pickup"
       case "completed": return "Completed"
+      case "cancelled": return "Cancelled"
+      case "rejected": return "Rejected"
       default: return status
     }
   }
 
   const viewOrderDetails = (parentOrderId: string) => {
     router.push(`/app/${courtId}/orders/${parentOrderId}`)
+  }
+
+  const handleCancelOrder = async (orderId: string, vendorName: string) => {
+    if (!token || cancellingOrders.has(orderId)) return
+
+    const confirmed = confirm(
+      `Are you sure you want to cancel your order from ${vendorName}? This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    setCancellingOrders(prev => new Set(prev).add(orderId))
+
+    try {
+      const result = await cancelOrder(courtId, orderId, "Cancelled by customer", token)
+      
+      if (result.success) {
+        // Refresh orders to get updated data
+        await fetchOrders(true)
+      } else {
+        alert(result.message || "Failed to cancel order. Please try again.")
+      }
+    } catch (error) {
+      console.error("Error cancelling order:", error)
+      alert("Failed to cancel order. Please try again.")
+    } finally {
+      setCancellingOrders(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(orderId)
+        return newSet
+      })
+    }
   }
 
   if (authLoading || (loading && !orderSummaries.length)) {
@@ -193,7 +231,7 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
               </p>
               {/* Socket Debug Info */}
               <div className="text-xs text-neutral-500 mt-1 flex items-center gap-4">
-                <span>Socket: {socketConnected ? '🟢 Connected' : '🔴 Disconnected'}</span>
+                <span>{socketConnected ? '🟢 Online' : '🔴 Offline'}</span>
                 {user?.id && <span>User: {user.id}</span>}
                 {lastUpdate && <span>Last Update: {lastUpdate.toLocaleTimeString()}</span>}
                 {socketError && <span className="text-red-500">Error: {socketError}</span>}
@@ -289,6 +327,14 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
 
                       {/* Progress Summary */}
                       <div className="space-y-2 mb-4">
+                        {orderSummary.overallStatus === 'cancelled' && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+                            <span className="text-neutral-700 dark:text-neutral-300">
+                              All orders cancelled by customer
+                            </span>
+                          </div>
+                        )}
                         {orderSummary.completedVendors > 0 && (
                           <div className="flex items-center gap-2 text-sm">
                             <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -302,6 +348,14 @@ export default function OrdersPage({ params }: { params: Promise<{ courtId: stri
                             <div className="w-2 h-2 bg-red-500 rounded-full"></div>
                             <span className="text-neutral-700 dark:text-neutral-300">
                               {orderSummary.rejectedVendors} vendors rejected (refund processed)
+                            </span>
+                          </div>
+                        )}
+                        {orderSummary.cancelledVendors > 0 && orderSummary.overallStatus !== 'cancelled' && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+                            <span className="text-neutral-700 dark:text-neutral-300">
+                              {orderSummary.cancelledVendors} vendors cancelled by customer
                             </span>
                           </div>
                         )}

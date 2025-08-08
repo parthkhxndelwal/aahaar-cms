@@ -1,17 +1,17 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, Plus, Search, Store, Users, Clock, Phone, Mail, MapPin, Star, CheckCircle, XCircle, ArrowRight } from "lucide-react"
+import { Plus, Search, Store, Phone, Mail, MapPin, Star, CheckCircle, Edit, Eye } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import Image from "next/image"
-import Link from "next/link"
+import { motion, AnimatePresence } from "framer-motion"
 
 interface Vendor {
   id: string
@@ -37,16 +37,12 @@ interface Vendor {
   gstin?: string
   maxOrdersPerHour?: number
   averagePreparationTime?: number
-  onboardingStatus?: "not_started" | "in_progress" | "completed"
-  onboardingStep?: string
-  onboardingCompletedAt?: string
-  onboardingStartedAt?: string
   metadata?: {
-    onboardingCompleted?: boolean
-    onboardingStep?: string
-    stakeholderId?: string
-    stakeholderCreated?: boolean
-    stakeholderData?: any
+    businessType?: string
+    stakeholder?: {
+      name: string
+      pan: string
+    }
   }
   createdAt: string
   updatedAt: string
@@ -66,6 +62,7 @@ interface VendorsListResponse {
 export default function VendorsPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const courtId = params.courtId as string
 
   const [vendors, setVendors] = useState<Vendor[]>([])
@@ -81,147 +78,21 @@ export default function VendorsPage() {
     hasPrev: false,
   })
 
-  // Find incomplete onboarding vendor
-  const incompleteOnboardingVendor = vendors.find(vendor => {
-    // Check direct properties first (new structure)
-    if (vendor.onboardingStatus === 'in_progress' && vendor.onboardingStep) {
-      console.log('Found incomplete onboarding vendor (direct props):', vendor.stallName, vendor.onboardingStep)
-      return true
-    }
-    // Fallback to metadata (legacy structure)
-    if (!vendor.metadata?.onboardingCompleted && vendor.metadata?.onboardingStep) {
-      console.log('Found incomplete onboarding vendor (metadata):', vendor.stallName, vendor.metadata.onboardingStep)
-      return true
-    }
-    // Also check if vendor was just created but no razorpay account yet (incomplete onboarding)
-    if (!vendor.razorpayAccountId && vendor.stallName) {
-      console.log('Found incomplete onboarding vendor (no razorpay):', vendor.stallName)
-      return true
-    }
-    return false
-  })
-
-  // Function to get step information for display
-  const getStepInfo = (stepKey: string): { number: number, title: string, total: number } => {
-    const steps = [
-      { key: "basic", number: 1, title: "Basic Details" },
-      { key: "password", number: 2, title: "Password Creation" },
-      { key: "stall", number: 3, title: "Stall Setup" },
-      { key: "hours", number: 4, title: "Operating Hours" },
-      { key: "bank", number: 5, title: "Bank Details" },
-      { key: "legal", number: 6, title: "Legal Compliance" },
-      { key: "account", number: 7, title: "Account Creation" },
-      { key: "stakeholder", number: 8, title: "Stakeholder Information" },
-      { key: "config", number: 9, title: "Final Configuration" },
-      { key: "success", number: 10, title: "Complete" }
-    ]
-    
-    const step = steps.find(s => s.key === stepKey) || steps[0]
-    return { number: step.number, title: step.title, total: steps.length }
-  }
-
-  // Function to determine the next step based on vendor data
-  const getNextIncompleteStep = (vendor: Vendor): string => {
-    if (!vendor) return "basic"
-    
-    console.log('=== VENDOR PAGE STEP DETECTION ===')
-    console.log(`Checking vendor: ${vendor.stallName}`)
-    console.log('Vendor data:', {
-      stallName: vendor.stallName,
-      vendorName: vendor.vendorName,
-      contactEmail: vendor.contactEmail,
-      contactPhone: vendor.contactPhone,
-      userId: vendor.userId,
-      logoUrl: vendor.logoUrl,
-      operatingHours: vendor.operatingHours,
-      bankAccountNumber: vendor.bankAccountNumber,
-      bankIfscCode: vendor.bankIfscCode,
-      panNumber: vendor.panNumber,
-      razorpayAccountId: vendor.razorpayAccountId,
-      maxOrdersPerHour: vendor.maxOrdersPerHour,
-      averagePreparationTime: vendor.averagePreparationTime,
-      onboardingStep: vendor.onboardingStep,
-      onboardingStatus: vendor.onboardingStatus
-    })
-    
-    // Define the step order and their completion criteria
-    const stepChecks = [
-      { step: "basic", isComplete: !!(vendor.stallName && vendor.vendorName && vendor.contactEmail && vendor.contactPhone) },
-      { step: "password", isComplete: !!vendor.userId }, // User account created
-      { step: "stall", isComplete: !!vendor.logoUrl }, // Logo uploaded
-      { step: "hours", isComplete: !!vendor.operatingHours }, // Operating hours set
-      { step: "bank", isComplete: !!(vendor.bankAccountNumber && vendor.bankIfscCode) }, // Bank details
-      { step: "legal", isComplete: !!vendor.panNumber }, // PAN number added
-      { step: "account", isComplete: !!vendor.razorpayAccountId }, // Razorpay account created
-      { step: "stakeholder", isComplete: !!(vendor.metadata?.stakeholderId || vendor.metadata?.stakeholderCreated) }, // Stakeholder info added
-      { step: "config", isComplete: !!(vendor.maxOrdersPerHour && vendor.averagePreparationTime) }, // Config set
-      { step: "success", isComplete: vendor.onboardingStatus === 'completed' } // Fully completed
-    ]
-    
-    console.log('Step completion status:')
-    stepChecks.forEach(check => {
-      console.log(`  ${check.step}: ${check.isComplete ? '✅ Complete' : '❌ Incomplete'}`)
-    })
-    
-    // If vendor has onboardingStep field, prefer that over auto-detection for better UX
-    if (vendor.onboardingStep && vendor.onboardingStep !== 'completed') {
-      console.log(`Using onboardingStep field: ${vendor.onboardingStep}`)
-      
-      // Validate that the step indicated by onboardingStep is actually incomplete
-      const stepIndex = stepChecks.findIndex(check => check.step === vendor.onboardingStep)
-      if (stepIndex !== -1 && !stepChecks[stepIndex].isComplete) {
-        console.log(`Confirmed: ${vendor.onboardingStep} is incomplete, using it`)
-        console.log('=== END VENDOR PAGE STEP DETECTION ===')
-        return vendor.onboardingStep
-      } else {
-        console.log(`Warning: onboardingStep ${vendor.onboardingStep} appears complete, falling back to auto-detection`)
-      }
-    }
-    
-    // Find the first incomplete step
-    for (const check of stepChecks) {
-      if (!check.isComplete) {
-        console.log(`Next incomplete step for ${vendor.stallName}: ${check.step}`)
-        console.log('=== END VENDOR PAGE STEP DETECTION ===')
-        return check.step
-      }
-    }
-    
-    // If all steps are complete, go to success
-    console.log('All steps complete, going to success')
-    console.log('=== END VENDOR PAGE STEP DETECTION ===')
-    return "success"
-  }
-
-  // Debug log
-  console.log('All vendors:', vendors.map(v => ({
-    name: v.stallName,
-    onboardingStatus: v.onboardingStatus,
-    onboardingStep: v.onboardingStep,
-    razorpayAccountId: v.razorpayAccountId,
-    metadata: v.metadata
-  })))
-  console.log('Incomplete onboarding vendor:', incompleteOnboardingVendor?.stallName || 'None found')
+  // Check for success message from onboarding
+  const successMessage = searchParams.get("success")
+  const newVendorId = searchParams.get("vendorId")
 
   useEffect(() => {
     fetchVendors()
   }, [courtId, currentPage, statusFilter])
 
-  // Clear button loading state on route change
+  // Show success message if vendor was just created
   useEffect(() => {
-    const handleRouteChange = () => {
-      setButtonLoading(null)
+    if (successMessage && newVendorId) {
+      // You can add a toast notification here if you have one
+      console.log("Vendor created successfully:", newVendorId)
     }
-    
-    // Reset loading state after a delay in case navigation fails
-    if (buttonLoading) {
-      const timer = setTimeout(() => {
-        setButtonLoading(null)
-      }, 3000)
-      
-      return () => clearTimeout(timer)
-    }
-  }, [buttonLoading])
+  }, [successMessage, newVendorId])
 
   const fetchVendors = async () => {
     try {
@@ -259,26 +130,24 @@ export default function VendorsPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
-        return "bg-green-100 text-green-800"
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
       case "inactive":
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
       case "maintenance":
-        return "bg-yellow-100 text-yellow-800"
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
       case "suspended":
-        return "bg-red-100 text-red-800"
+        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
       default:
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
     }
   }
 
   const VendorCard = ({ vendor }: { vendor: Vendor }) => {
-    const isPending = !vendor.metadata?.onboardingCompleted
-    const continueButtonId = `continue-${vendor.id}`
     const viewButtonId = `view-${vendor.id}`
     const editButtonId = `edit-${vendor.id}`
     
     return (
-      <Card className="hover:shadow-md transition-shadow">
+      <Card className="hover:shadow-md transition-all duration-300 dark:bg-neutral-900 dark:border-neutral-800 hover:shadow-neutral-900/20">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
@@ -291,13 +160,13 @@ export default function VendorsPage() {
                   className="rounded-lg object-cover"
                 />
               ) : (
-                <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
+                <div className="w-12 h-12 bg-neutral-200 dark:bg-neutral-700 rounded-lg flex items-center justify-center">
                   <Store className="h-6 w-6 text-muted-foreground" />
                 </div>
               )}
               <div>
-                <CardTitle className="text-lg">{vendor.stallName}</CardTitle>
-                <CardDescription>{vendor.vendorName}</CardDescription>
+                <CardTitle className="text-lg dark:text-white">{vendor.stallName}</CardTitle>
+                <CardDescription className="dark:text-neutral-400">{vendor.vendorName}</CardDescription>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -305,7 +174,7 @@ export default function VendorsPage() {
                 {vendor.status}
               </Badge>
               {vendor.isOnline && (
-                <Badge variant="outline" className="bg-green-50 text-green-700">
+                <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900 dark:text-green-200">
                   Online
                 </Badge>
               )}
@@ -316,22 +185,22 @@ export default function VendorsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground" />
-              <span className="truncate">{vendor.contactEmail}</span>
+              <span className="truncate dark:text-neutral-300">{vendor.contactEmail}</span>
             </div>
             <div className="flex items-center gap-2">
               <Phone className="h-4 w-4 text-muted-foreground" />
-              <span>{vendor.contactPhone}</span>
+              <span className="dark:text-neutral-300">{vendor.contactPhone}</span>
             </div>
             {vendor.stallLocation && (
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate">{vendor.stallLocation}</span>
+                <span className="truncate dark:text-neutral-300">{vendor.stallLocation}</span>
               </div>
             )}
             {vendor.cuisineType && (
               <div className="flex items-center gap-2">
                 <Store className="h-4 w-4 text-muted-foreground" />
-                <span>{vendor.cuisineType}</span>
+                <span className="dark:text-neutral-300">{vendor.cuisineType}</span>
               </div>
             )}
           </div>
@@ -339,146 +208,118 @@ export default function VendorsPage() {
           {vendor.totalRatings > 0 && (
             <div className="flex items-center gap-2">
               <Star className="h-4 w-4 text-yellow-500 fill-current" />
-              <span className="text-sm">
+              <span className="text-sm dark:text-neutral-300">
                 {vendor.rating.toFixed(1)} ({vendor.totalRatings} reviews)
               </span>
             </div>
           )}
 
-          {isPending ? (
-            <div className="flex items-center justify-between pt-2 border-t">
-              <div className="flex items-center gap-2 text-sm text-orange-600">
-                <Clock className="h-4 w-4" />
-                <span>
-                  {(() => {
-                    const nextStep = getNextIncompleteStep(vendor)
-                    const stepInfo = getStepInfo(nextStep)
-                    return `Step ${stepInfo.number}/${stepInfo.total} - ${stepInfo.title}`
-                  })()}
-                </span>
-              </div>
+          <div className="flex items-center justify-end pt-2 border-t dark:border-neutral-700">
+            <div className="flex gap-2">
               <Button
+                variant="outline"
                 size="sm"
-                disabled={buttonLoading === continueButtonId}
+                disabled={buttonLoading === viewButtonId}
                 onClick={() => {
-                  const nextStep = getNextIncompleteStep(vendor)
-                  console.log(`Vendor card: Redirecting to next step ${nextStep} for vendor ${vendor.stallName}`)
-                  setButtonLoading(continueButtonId)
-                  router.push(`/admin/${courtId}/vendors/onboard/${nextStep}/${vendor.id}`)
+                  setButtonLoading(viewButtonId)
+                  router.push(`/admin/${courtId}/vendors/${vendor.id}`)
                 }}
-                className="gap-2"
+                className="gap-2 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
-                {buttonLoading === continueButtonId ? (
-                  <Spinner size={16} variant="white" />
-                ) : null}
-                Continue Setup
+                {buttonLoading === viewButtonId ? (
+                  <Spinner size={16} variant="dark" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+                View
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={buttonLoading === editButtonId}
+                onClick={() => {
+                  setButtonLoading(editButtonId)
+                  router.push(`/admin/${courtId}/vendors/${vendor.id}/edit`)
+                }}
+                className="gap-2 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                {buttonLoading === editButtonId ? (
+                  <Spinner size={16} variant="dark" />
+                ) : (
+                  <Edit className="h-4 w-4" />
+                )}
+                Edit
               </Button>
             </div>
-          ) : (
-            <div className="flex items-center justify-between pt-2 border-t">
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle className="h-4 w-4" />
-                <span>Fully Configured</span>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={buttonLoading === viewButtonId}
-                  onClick={() => {
-                    setButtonLoading(viewButtonId)
-                    router.push(`/admin/${courtId}/vendors/${vendor.id}`)
-                  }}
-                  className="gap-2"
-                >
-                  {buttonLoading === viewButtonId ? (
-                    <Spinner size={16} variant="dark" />
-                  ) : null}
-                  View Details
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={buttonLoading === editButtonId}
-                  onClick={() => {
-                    setButtonLoading(editButtonId)
-                    router.push(`/admin/${courtId}/vendors/${vendor.id}/edit`)
-                  }}
-                  className="gap-2"
-                >
-                  {buttonLoading === editButtonId ? (
-                    <Spinner size={16} variant="dark" />
-                  ) : null}
-                  Edit
-                </Button>
-              </div>
-            </div>
-          )}
+          </div>
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      {/* Success Alert */}
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <AlertDescription className="text-green-800 dark:text-green-200">
+                <strong>Success!</strong> Vendor has been created and configured successfully.
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <motion.div 
+        className="flex items-center justify-between"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+      >
         <div>
           <h1 className="text-3xl font-bold dark:text-neutral-200">Vendors</h1>
-          <p className="text-muted-foreground">
-            Manage vendors and their onboarding status
+          <p className="text-muted-foreground dark:text-neutral-400">
+            Manage vendors and their configuration
           </p>
         </div>
         <Button
-          disabled={buttonLoading === 'header-button'}
+          disabled={buttonLoading === 'create-vendor'}
           onClick={() => {
-            setButtonLoading('header-button')
-            if (incompleteOnboardingVendor) {
-              // Continue existing onboarding - go to next incomplete step
-              const nextStep = getNextIncompleteStep(incompleteOnboardingVendor)
-              console.log(`Redirecting to next incomplete step: ${nextStep}`)
-              router.push(`/admin/${courtId}/vendors/onboard/${nextStep}/${incompleteOnboardingVendor.id}`)
-            } else {
-              // Start new onboarding
-              router.push(`/admin/${courtId}/vendors/onboard/basic`)
-            }
+            setButtonLoading('create-vendor')
+            router.push(`/admin/${courtId}/vendors/onboard`)
           }}
-          className="gap-2"
+          className="gap-2 bg-neutral-100 hover:bg-neutral-700 text-black hover:text-white"
         >
-          {buttonLoading === 'header-button' ? (
+          {buttonLoading === 'create-vendor' ? (
             <Spinner size={16} variant="white" />
-          ) : incompleteOnboardingVendor ? (
-            <ArrowRight className="h-4 w-4" />
           ) : (
             <Plus className="h-4 w-4" />
           )}
-          {incompleteOnboardingVendor 
-            ? `Finish Setting up "${incompleteOnboardingVendor.stallName}"`
-            : "Create New Vendor"
-          }
+          Create New Vendor
         </Button>
-      </div>
-
-      {/* Incomplete Onboarding Alert */}
-      {incompleteOnboardingVendor && (
-        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
-          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <AlertDescription className="text-amber-800 dark:text-amber-200">
-            <strong>Incomplete Onboarding:</strong> You have an unfinished vendor setup for "{incompleteOnboardingVendor.stallName}". 
-            Complete this onboarding before registering a new vendor. 
-            <span className="font-medium ml-1">
-              {(() => {
-                const nextStep = getNextIncompleteStep(incompleteOnboardingVendor)
-                const stepInfo = getStepInfo(nextStep)
-                return `Next: Step ${stepInfo.number}/${stepInfo.total} - ${stepInfo.title}`
-              })()}
-            </span>
-          </AlertDescription>
-        </Alert>
-      )}
+      </motion.div>
 
       {/* Filters and Search */}
-      <Card>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
+        <Card className="dark:bg-neutral-900 dark:border-neutral-800">
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="relative flex-1">
@@ -487,76 +328,94 @@ export default function VendorsPage() {
                 placeholder="Search vendors by name, email, or stall name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-10 dark:bg-neutral-800 dark:border-neutral-700 dark:text-white"
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full md:w-48">
+              <SelectTrigger className="w-full md:w-48 dark:bg-neutral-800 dark:border-neutral-700 dark:text-white">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
+              <SelectContent className="dark:bg-neutral-800 dark:border-neutral-700">
+                <SelectItem value="all" className="dark:text-white dark:hover:bg-neutral-700">All Statuses</SelectItem>
+                <SelectItem value="active" className="dark:text-white dark:hover:bg-neutral-700">Active</SelectItem>
+                <SelectItem value="inactive" className="dark:text-white dark:hover:bg-neutral-700">Inactive</SelectItem>
+                <SelectItem value="maintenance" className="dark:text-white dark:hover:bg-neutral-700">Maintenance</SelectItem>
+                <SelectItem value="suspended" className="dark:text-white dark:hover:bg-neutral-700">Suspended</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </CardContent>
       </Card>
+      </motion.div>
 
       {/* Vendors List */}
-      <div className="space-y-4">
+      <motion.div 
+        className="space-y-4"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, delay: 0.3 }}
+      >
         {loading ? (
-          <div className="flex items-center justify-center py-12">
+          <motion.div 
+            className="flex items-center justify-center py-12"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
             <div className="text-center">
-              <Spinner size={32} variant="dark" className="mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading vendors...</p>
+              <Spinner size={32} variant="white" className="mx-auto mb-4" />
+              <p className="text-muted-foreground dark:text-neutral-400">Loading vendors...</p>
             </div>
-          </div>
+          </motion.div>
         ) : filteredVendors.length === 0 ? (
-          <Card>
+          <Card className="dark:bg-neutral-900 dark:border-neutral-800">
             <CardContent className="py-12">
               <div className="text-center">
                 <Store className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No vendors found</h3>
-                <p className="text-muted-foreground mb-4">
+                <h3 className="text-lg font-semibold mb-2 dark:text-white">No vendors found</h3>
+                <p className="text-muted-foreground dark:text-neutral-400 mb-4">
                   {searchTerm || (statusFilter !== "all")
                     ? "No vendors match your current filters."
-                    : "Get started by registering your first vendor."}
+                    : "Get started by creating your first vendor."}
                 </p>
                 <Button
-                  disabled={buttonLoading === 'register-new'}
+                  disabled={buttonLoading === 'create-first-vendor'}
                   onClick={() => {
-                    setButtonLoading('register-new')
-                    router.push(`/admin/${courtId}/vendors/onboard/basic`)
+                    setButtonLoading('create-first-vendor')
+                    router.push(`/admin/${courtId}/vendors/onboard`)
                   }}
-                  className="gap-2"
+                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  {buttonLoading === 'register-new' ? (
+                  {buttonLoading === 'create-first-vendor' ? (
                     <Spinner size={16} variant="white" />
                   ) : (
                     <Plus className="h-4 w-4" />
                   )}
-                  Register New Vendor
+                  Create First Vendor
                 </Button>
               </div>
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4">
-            {filteredVendors.map((vendor) => (
-              <VendorCard key={vendor.id} vendor={vendor} />
+            {filteredVendors.map((vendor, index) => (
+              <motion.div
+                key={vendor.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.4 + index * 0.1 }}
+              >
+                <VendorCard vendor={vendor} />
+              </motion.div>
             ))}
           </div>
         )}
-      </div>
+      </motion.div>
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground dark:text-neutral-400">
             Showing {filteredVendors.length} of {pagination.totalItems} vendors
           </p>
           <div className="flex gap-2">
@@ -564,6 +423,7 @@ export default function VendorsPage() {
               variant="outline"
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={!pagination.hasPrev}
+              className="dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Previous
             </Button>
@@ -571,12 +431,13 @@ export default function VendorsPage() {
               variant="outline"
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={!pagination.hasNext}
+              className="dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Next
             </Button>
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }

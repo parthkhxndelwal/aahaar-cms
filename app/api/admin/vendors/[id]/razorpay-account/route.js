@@ -1,244 +1,131 @@
 import { NextResponse } from "next/server"
 import db from "@/models"
-import { createRouteAccount } from "@/utils/razorpay"
 
-// Create Razorpay account for vendor
 export async function POST(request, { params }) {
   try {
     const { id } = await params
-    const body = await request.json()
-
     const vendor = await db.Vendor.findByPk(id)
     if (!vendor) {
       return NextResponse.json({ success: false, message: "Vendor not found" }, { status: 404 })
     }
 
-    // Check if account creation is already in progress or completed
-    if (vendor.razorpayAccountId) {
-      console.log(`[RAZORPAY ACCOUNT] Vendor ${id} already has Razorpay account: ${vendor.razorpayAccountId}`)
-      
-      // Try to fetch the existing account details from Razorpay
-      try {
-        const accountResponse = await fetch(`https://api.razorpay.com/v2/accounts/${vendor.razorpayAccountId}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Basic ${Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64')}`,
-          },
-        })
+    const keyId = process.env.RAZORPAY_TEST_APIKEY || process.env.RAZORPAY_KEY_ID
+    const keySecret = process.env.RAZORPAY_API_SECRET || process.env.RAZORPAY_KEY_SECRET
+    if (!keyId || !keySecret) {
+      return NextResponse.json({ success: false, message: "Razorpay credentials missing in environment" }, { status: 500 })
+    }
+    const auth = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64')
+    const headers = { 'Authorization': auth, 'Content-Type': 'application/json' }
+    const base = 'https://api.razorpay.com/v2'
 
-        if (accountResponse.ok) {
-          const accountData = await accountResponse.json()
-          console.log(`[RAZORPAY ACCOUNT] Successfully fetched existing account details for vendor ${id}`)
-          
-          // Update vendor metadata to ensure account is linked
-          await vendor.update({
-            metadata: {
-              ...vendor.metadata,
-              businessType: body.businessType || vendor.metadata?.businessType,
-              panDocFileId: body.panDocFileId || vendor.metadata?.panDocFileId,
-              onboardingCompleted: true,
-              onboardingStep: 'completed',
-              razorpayAccountData: accountData,
-              accountLinkedAt: new Date().toISOString()
-            },
-            status: 'active',
-            onboardingStatus: 'completed',
-            onboardingStep: 'completed',
-            onboardingCompletedAt: new Date()
-          })
+    let accountId = vendor.razorpayAccountId || null
+    let stakeholderId = vendor.metadata?.stakeholderId || null
+    let productId = vendor.metadata?.productConfiguration?.productId || null
 
-          return NextResponse.json({
-            success: true,
-            message: "Existing Razorpay account linked successfully",
-            data: {
-              account: accountData,
-              vendor: await vendor.reload(),
-              linked: true
-            },
-          })
-        } else {
-          console.log(`[RAZORPAY ACCOUNT] Could not fetch existing account details, but account ID exists: ${vendor.razorpayAccountId}`)
-          return NextResponse.json({
-            success: true,
-            message: "Razorpay account already linked",
-            data: {
-              account: { id: vendor.razorpayAccountId },
-              vendor: await vendor.reload(),
-              linked: true
-            },
-          })
+    // 1) Create Linked Account if missing
+    if (!accountId) {
+      const businessType = vendor.metadata?.businessType || 'individual'
+      // Force category/subcategory
+      const category = 'food'
+      const subcategory = 'restaurant'
+      const addr = vendor.metadata?.registeredAddress || {}
+      // Build short reference id (<20 chars)
+      const stallSlug = (vendor.stallName || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+      const shortStall = stallSlug.slice(0, 6) || 'vendor'
+      const shortCourt = (vendor.courtId || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4) || 'ct'
+      const ts = Date.now().toString(36).slice(-4)
+      const refId = `${shortCourt}${shortStall}${ts}`.slice(0, 19)
+
+      const payload = {
+        email: vendor.contactEmail,
+        phone: vendor.contactPhone?.startsWith('+') ? vendor.contactPhone : `+91${vendor.contactPhone}`,
+        type: 'route',
+        reference_id: refId,
+        legal_business_name: vendor.stallName,
+        business_type: businessType,
+        contact_name: vendor.vendorName,
+        profile: {
+          category,
+          subcategory,
+          addresses: {
+            registered: {
+              street1: addr.addressStreet1 || vendor.stallLocation || 'Address Line 1',
+              street2: addr.addressStreet2 || '',
+              city: addr.addressCity || 'City',
+              state: (addr.addressState || 'STATE').toUpperCase(),
+              postal_code: addr.addressPostalCode || '000000',
+              country: (addr.addressCountry || 'IN').toUpperCase(),
+            }
+          }
+        },
+        legal_info: vendor.panNumber ? { pan: vendor.panNumber } : undefined
+      }
+      const res = await fetch(`${base}/accounts`, { method: 'POST', headers, body: JSON.stringify(payload) })
+      const json = await res.json()
+      if (!res.ok) {
+        return NextResponse.json({ success: false, message: json?.error?.description || json?.message || 'Failed to create account' }, { status: 400 })
+      }
+      accountId = json.id
+      await vendor.update({ razorpayAccountId: accountId, metadata: { ...vendor.metadata, razorpayAccountStatus: json.status, razorpayReferenceId: refId, businessCategory: category, businessSubcategory: subcategory } })
+    }
+
+    // 2) Create Stakeholder if missing
+    if (!stakeholderId) {
+      const addr = vendor.metadata?.registeredAddress || {}
+      const residentialStreet = [addr.addressStreet1, addr.addressStreet2].filter(Boolean).join(', ')
+      const payload = {
+        name: vendor.vendorName,
+        email: vendor.contactEmail,
+        addresses: {
+          residential: {
+            street: residentialStreet || (vendor.stallLocation || 'Address'),
+            city: addr.addressCity || 'City',
+            state: addr.addressState || 'State',
+            postal_code: addr.addressPostalCode || '000000',
+            country: (addr.addressCountry || 'IN').toLowerCase()
+          }
         }
-      } catch (fetchError) {
-        console.log(`[RAZORPAY ACCOUNT] Error fetching existing account, but linking anyway: ${fetchError.message}`)
-        return NextResponse.json({
-          success: true,
-          message: "Razorpay account already linked",
-          data: {
-            account: { id: vendor.razorpayAccountId },
-            vendor: await vendor.reload(),
-            linked: true
-          },
-        })
+      }
+      const res = await fetch(`${base}/accounts/${accountId}/stakeholders`, { method: 'POST', headers, body: JSON.stringify(payload) })
+      const json = await res.json()
+      if (!res.ok) {
+        return NextResponse.json({ success: false, message: json?.error?.description || json?.message || 'Failed to create stakeholder' }, { status: 400 })
+      }
+      stakeholderId = json.id
+      await vendor.update({ metadata: { ...vendor.metadata, stakeholderId } })
+    }
+
+    // 3a) Initialize Product if missing
+    if (!productId) {
+      const payload = { product_name: 'route', tnc_accepted: true }
+      const res = await fetch(`${base}/accounts/${accountId}/products`, { method: 'POST', headers, body: JSON.stringify(payload) })
+      const json = await res.json()
+      if (!res.ok) {
+        return NextResponse.json({ success: false, message: json?.error?.description || json?.message || 'Failed to init product' }, { status: 400 })
+      }
+      productId = json.id
+      await vendor.update({ metadata: { ...vendor.metadata, productConfiguration: { productId, activation_status: json.activation_status, requirements: json.requirements || [] } } })
+    }
+
+    // 3b) Patch Product settlements
+    const patchPayload = {
+      settlements: {
+        account_number: vendor.bankAccountNumber || '',
+        ifsc_code: vendor.bankIfscCode || '',
+        beneficiary_name: vendor.bankAccountHolderName || vendor.vendorName
       }
     }
-
-    // Check for race condition - if account creation is in progress
-    if (vendor.metadata?.razorpayAccountCreating === true) {
-      console.log(`[RAZORPAY ACCOUNT] Account creation already in progress for vendor ${id}, rejecting duplicate request`)
-      return NextResponse.json({ 
-        success: false, 
-        message: "Account creation already in progress" 
-      }, { status: 409 })
+    const patchRes = await fetch(`${base}/accounts/${accountId}/products/${productId}`, { method: 'PATCH', headers, body: JSON.stringify(patchPayload) })
+    const patchJson = await patchRes.json()
+    if (!patchRes.ok) {
+      return NextResponse.json({ success: false, message: patchJson?.error?.description || patchJson?.message || 'Failed to update product' }, { status: 400 })
     }
 
-    const { 
-      businessType, 
-      panDocFileId,
-      stallAddress 
-    } = body
+    await vendor.update({ metadata: { ...vendor.metadata, productConfiguration: { productId, activation_status: patchJson.activation_status || patchJson.active_configuration?.activation_status || 'unknown', requirements: patchJson.requirements || [] } } })
 
-    console.log(`[RAZORPAY ACCOUNT] Creating account for vendor ${id}:`, {
-      vendorId: id,
-      stallName: vendor.stallName,
-      contactEmail: vendor.contactEmail,
-      contactPhone: vendor.contactPhone,
-      panNumber: vendor.panNumber,
-      gstin: vendor.gstin,
-      businessType,
-      existingRazorpayAccountId: vendor.razorpayAccountId
-    })
-
-    // Set creation in progress flag to prevent race conditions
-    await vendor.update({
-      metadata: {
-        ...vendor.metadata,
-        razorpayAccountCreating: true
-      }
-    })
-
-    // Prepare data for Razorpay account creation
-    const vendorData = {
-      email: vendor.contactEmail,
-      phone: vendor.contactPhone,
-      vendorName: vendor.vendorName,
-      stallName: vendor.stallName,
-      courtId: vendor.courtId,
-      vendorId: vendor.id,
-      panNumber: vendor.panNumber,
-      gstin: vendor.gstin,
-      accountHolderName: vendor.bankAccountHolderName,
-      accountNumber: vendor.bankAccountNumber,
-      ifscCode: vendor.bankIfscCode,
-      businessType,
-      panDocFileId,
-      stallAddress: stallAddress || vendor.stallLocation
-    }
-
-    // Create Razorpay route account
-    console.log(`[RAZORPAY ACCOUNT] Calling createRouteAccount with data:`, vendorData)
-    const result = await createRouteAccount(vendorData)
-    
-    console.log(`[RAZORPAY ACCOUNT] createRouteAccount result:`, {
-      success: result.success,
-      error: result.error,
-      accountId: result.account?.id,
-      accountStatus: result.account?.status,
-      fullResult: result
-    })
-
-    if (!result.success) {
-      console.log(`[RAZORPAY ACCOUNT] Account creation failed for vendor ${id}:`, result.error)
-      
-      // Clear the creation flag on failure
-      await vendor.update({
-        metadata: {
-          ...vendor.metadata,
-          razorpayAccountCreating: false
-        }
-      })
-      
-      return NextResponse.json({
-        success: false,
-        message: result.error || "Failed to create Razorpay account",
-      }, { status: 400 })
-    }
-
-    // Update vendor with Razorpay account details
-    console.log(`[RAZORPAY ACCOUNT] Updating vendor ${id} with Razorpay account ID: ${result.account.id}`)
-    await vendor.update({
-      razorpayAccountId: result.account.id,
-      metadata: {
-        ...vendor.metadata,
-        businessType,
-        panDocFileId,
-        onboardingCompleted: true,
-        onboardingStep: 'completed',
-        razorpayAccountData: result.account
-      },
-      status: 'active', // Mark as active once Razorpay account is created
-      onboardingStatus: 'completed',
-      onboardingStep: 'completed',
-      onboardingCompletedAt: new Date()
-    })
-
-    console.log(`[RAZORPAY ACCOUNT] Successfully created and updated vendor ${id} with Razorpay account`)
-    return NextResponse.json({
-      success: true,
-      message: "Razorpay account created successfully",
-      data: {
-        account: result.account,
-        vendor: await vendor.reload()
-      },
-    })
+    return NextResponse.json({ success: true, message: 'Razorpay account configured', data: { accountId, stakeholderId, productId } })
   } catch (error) {
-    console.error(`[RAZORPAY ACCOUNT] Error creating Razorpay account for vendor ${id}:`, {
-      error: error.message,
-      stack: error.stack,
-      vendorId: id
-    })
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
-  }
-}
-
-// Get Razorpay account details
-export async function GET(request, { params }) {
-  try {
-    const { id } = await params
-
-    const vendor = await db.Vendor.findByPk(id)
-    if (!vendor) {
-      return NextResponse.json({ success: false, message: "Vendor not found" }, { status: 404 })
-    }
-
-    if (!vendor.razorpayAccountId) {
-      return NextResponse.json({ success: false, message: "Vendor doesn't have a Razorpay account" }, { status: 404 })
-    }
-
-    try {
-      const response = await fetch(`https://api.razorpay.com/v2/accounts/${vendor.razorpayAccountId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Basic ${Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64')}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`Razorpay API returned ${response.status}`)
-      }
-
-      const accountData = await response.json()
-
-      return NextResponse.json({
-        success: true,
-        data: accountData,
-      })
-    } catch (error) {
-      console.error("Razorpay API error:", error)
-      return NextResponse.json({ success: false, message: "Failed to fetch Razorpay account details" }, { status: 500 })
-    }
-  } catch (error) {
-    console.error("Get Razorpay account error:", error)
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 })
+    console.error('Razorpay account setup error:', error)
+    return NextResponse.json({ success: false, message: 'Internal server error' }, { status: 500 })
   }
 }

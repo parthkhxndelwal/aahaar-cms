@@ -54,7 +54,7 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const [actionType, setActionType] = useState<'accept' | 'reject' | 'start_preparing' | 'mark_ready' | 'complete' | null>(null)
+  const [actionType, setActionType] = useState<'accept' | 'reject' | 'mark_ready' | 'complete' | null>(null)
   const [rejectionReason, setRejectionReason] = useState("")
   const [otpInput, setOtpInput] = useState("")
   const [actionLoading, setActionLoading] = useState(false)
@@ -314,17 +314,6 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
                 </>
               )}
               
-              {section === 'queue' && order.status === 'accepted' && (
-                <Button
-                  size="sm"
-                  className="w-full bg-orange-600 hover:bg-orange-700 text-white"
-                  onClick={() => openDialog(order, 'start_preparing')}
-                >
-                  <Play className="h-4 w-4 mr-1" />
-                  Start Preparing
-                </Button>
-              )}
-
               {section === 'queue' && order.status === 'preparing' && (
                 <Button
                   size="sm"
@@ -439,7 +428,7 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
           <TabsContent value="queue" className="mt-4">
             <div className="space-y-4">
               <div className="text-sm text-neutral-600 dark:text-neutral-400">
-                Accepted orders in preparation queue
+                Orders being prepared in queue
               </div>
               <AnimatePresence mode="popLayout">
                 {queueOrders.length === 0 ? (
@@ -485,7 +474,6 @@ export default function VendorOrdersPage({ params }: { params: Promise<{ courtId
             <DialogTitle>
               {actionType === 'accept' && 'Accept Order'}
               {actionType === 'reject' && 'Reject Order'}
-              {actionType === 'start_preparing' && 'Start Preparing'}
               {actionType === 'mark_ready' && 'Mark as Ready'}
               {actionType === 'complete' && 'Complete Order'}
             </DialogTitle>

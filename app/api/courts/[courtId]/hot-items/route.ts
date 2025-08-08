@@ -11,6 +11,11 @@ interface HotMenuItem {
   imageUrl?: string
   vendorId: string
   category: string
+  // Stock management fields
+  hasStock: boolean
+  stockQuantity?: number
+  stockUnit?: string
+  status: string
   vendor: {
     stallName: string
     cuisineType: string
@@ -52,7 +57,11 @@ export async function GET(
         "mrp",
         "imageUrl",
         "vendorId",
-        "category"
+        "category",
+        "hasStock",
+        "stockQuantity",
+        "stockUnit",
+        "status"
       ],
       order: [
         ['createdAt', 'DESC'],
@@ -89,7 +98,11 @@ export async function GET(
           "mrp",
           "imageUrl",
           "vendorId",
-          "category"
+          "category",
+          "hasStock",
+          "stockQuantity",
+          "stockUnit",
+          "status"
         ],
         order: [
           ['createdAt', 'DESC'],
@@ -110,6 +123,10 @@ export async function GET(
           imageUrl: "/placeholder.jpg",
           vendorId: "vendor-1",
           category: "Fast Food",
+          hasStock: true,
+          stockQuantity: 15,
+          stockUnit: "pieces",
+          status: "active",
           vendor: {
             stallName: "Quick Bites",
             cuisineType: "Fast Food"
@@ -124,6 +141,10 @@ export async function GET(
           imageUrl: "/placeholder.jpg",
           vendorId: "vendor-2",
           category: "Italian",
+          hasStock: true,
+          stockQuantity: 3,
+          stockUnit: "pieces",
+          status: "active",
           vendor: {
             stallName: "Pizza Corner",
             cuisineType: "Italian"
@@ -138,6 +159,10 @@ export async function GET(
           imageUrl: "/placeholder.jpg", 
           vendorId: "vendor-3",
           category: "Indian",
+          hasStock: false,
+          stockQuantity: 0,
+          stockUnit: "plates",
+          status: "active",
           vendor: {
             stallName: "Spice Garden",
             cuisineType: "Indian"
@@ -176,20 +201,31 @@ export async function GET(
     }
 
     // Transform the data to match the expected format
-    const hotItems: HotMenuItem[] = selectedItems.map((item: any) => ({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      price: item.price,
-      mrp: item.mrp,
-      imageUrl: item.imageUrl || "/placeholder.jpg",
-      vendorId: item.vendorId,
-      category: item.category,
-      vendor: {
-        stallName: item.vendor.stallName,
-        cuisineType: item.vendor.cuisineType,
+    const hotItems: HotMenuItem[] = selectedItems.map((item: any) => {
+      const transformedItem = {
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: parseFloat(item.price) || 0, // Ensure it's a number
+        mrp: item.mrp ? parseFloat(item.mrp) : undefined, // Ensure it's a number or undefined
+        imageUrl: item.imageUrl || "/placeholder.jpg",
+        vendorId: item.vendorId,
+        category: item.category,
+        hasStock: item.hasStock || false,
+        stockQuantity: item.stockQuantity || 0,
+        stockUnit: item.stockUnit || "pieces",
+        status: item.status || "active",
+        vendor: {
+          stallName: item.vendor.stallName,
+          cuisineType: item.vendor.cuisineType,
+        }
       }
-    }))
+      
+      // Debug logging for price/mrp transformation
+      console.log(`💰 [HotItems] Item "${item.name}": price ${item.price} (${typeof item.price}) → ${transformedItem.price} (${typeof transformedItem.price}), mrp ${item.mrp} (${typeof item.mrp}) → ${transformedItem.mrp} (${typeof transformedItem.mrp})`)
+      
+      return transformedItem
+    })
 
     return NextResponse.json({
       success: true,
@@ -209,6 +245,10 @@ export async function GET(
         imageUrl: "/placeholder.jpg",
         vendorId: "vendor-1",
         category: "Fast Food",
+        hasStock: true,
+        stockQuantity: 12,
+        stockUnit: "pieces",
+        status: "active",
         vendor: {
           stallName: "Quick Bites",
           cuisineType: "Fast Food"
@@ -223,6 +263,10 @@ export async function GET(
         imageUrl: "/placeholder.jpg",
         vendorId: "vendor-2",
         category: "Italian",
+        hasStock: true,
+        stockQuantity: 0,
+        stockUnit: "pieces",
+        status: "out_of_stock",
         vendor: {
           stallName: "Pizza Corner",
           cuisineType: "Italian"
@@ -237,6 +281,10 @@ export async function GET(
         imageUrl: "/placeholder.jpg", 
         vendorId: "vendor-3",
         category: "Indian",
+        hasStock: false,
+        stockQuantity: 0,
+        stockUnit: "plates",
+        status: "active",
         vendor: {
           stallName: "Spice Garden",
           cuisineType: "Indian"

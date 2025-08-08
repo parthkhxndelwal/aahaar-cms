@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server"
 import { Op } from "sequelize"
 import db from "@/models"
-import { createRouteAccount } from "@/utils/razorpay"
 
 // GET - Get specific vendor
 export async function GET(request, { params }) {
   try {
     const { id } = await params
+    const { searchParams } = new URL(request.url)
+    const courtId = searchParams.get('courtId')
+
+    const where = courtId ? { id, courtId } : { id }
 
     const vendor = await db.Vendor.findOne({
-      where: { id },
+      where,
       include: [
         {
           model: db.User,
@@ -21,7 +24,7 @@ export async function GET(request, { params }) {
     })
 
     if (!vendor) {
-      return NextResponse.json({ success: false, message: "Vendor not found" }, { status: 404 })
+      return NextResponse.json({ success: false, message: `Vendor not found: ${id}${courtId ? ` (courtId=${courtId})` : ''}` }, { status: 404 })
     }
 
     return NextResponse.json({
@@ -45,25 +48,38 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ success: false, message: "Vendor not found" }, { status: 404 })
     }
 
-    // Check for duplicate email or phone if being updated
-    if (body.contactEmail || body.contactPhone) {
-      const whereClause = {
-        id: { [Op.not]: id },
-        [Op.or]: [],
-      }
+    // Normalize email if present
+    if (body.contactEmail) {
+      body.contactEmail = body.contactEmail.toLowerCase()
+    }
 
+    // Check for duplicate email or phone (within same court) if being updated
+    if (body.contactEmail || body.contactPhone || body.panNumber) {
+      const orConditions = []
       if (body.contactEmail && body.contactEmail !== vendor.contactEmail) {
-        whereClause[Op.or].push({ contactEmail: body.contactEmail })
+        orConditions.push({ contactEmail: body.contactEmail })
       }
-      
       if (body.contactPhone && body.contactPhone !== vendor.contactPhone) {
-        whereClause[Op.or].push({ contactPhone: body.contactPhone })
+        orConditions.push({ contactPhone: body.contactPhone })
+      }
+      if (body.panNumber && body.panNumber !== vendor.panNumber) {
+        orConditions.push({ panNumber: body.panNumber })
       }
 
-      if (whereClause[Op.or].length > 0) {
-        const existingVendor = await db.Vendor.findOne({ where: whereClause })
+      if (orConditions.length > 0) {
+        const existingVendor = await db.Vendor.findOne({
+          where: {
+            id: { [Op.not]: id },
+            courtId: vendor.courtId,
+            [Op.or]: orConditions,
+          },
+          attributes: ['id', 'contactEmail', 'contactPhone', 'panNumber']
+        })
         if (existingVendor) {
-          const field = existingVendor.contactEmail === body.contactEmail ? "email" : "phone"
+          let field = 'email'
+          if (existingVendor.contactEmail === body.contactEmail) field = 'email'
+          else if (existingVendor.contactPhone === body.contactPhone) field = 'phone'
+          else if (existingVendor.panNumber === body.panNumber) field = 'panNumber'
           return NextResponse.json(
             { 
               success: false, 
@@ -76,7 +92,7 @@ export async function PATCH(request, { params }) {
       }
     }
 
-    // Check for duplicate stall name if being updated
+    // Check for duplicate stall name if being updated (same court)
     if (body.stallName && body.stallName !== vendor.stallName) {
       const existingStall = await db.Vendor.findOne({
         where: {

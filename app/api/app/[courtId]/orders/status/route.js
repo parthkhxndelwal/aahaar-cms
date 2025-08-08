@@ -35,10 +35,10 @@ export async function GET(request, { params }) {
       whereClause.status = status
     }
 
-    // If activeOnly, filter for non-completed and non-rejected orders
+    // If activeOnly, filter for non-completed, non-rejected and non-cancelled orders
     if (activeOnly) {
       whereClause.status = {
-        [Op.notIn]: ['completed', 'cancelled']
+        [Op.notIn]: ['completed', 'rejected', 'cancelled']
       }
     }
 
@@ -85,11 +85,12 @@ export async function GET(request, { params }) {
           orderOtp: order.orderOtp,
           orders: [],
           totalAmount: 0,
-          overallStatus: 'pending', // pending, partial, ready, completed
+          overallStatus: 'pending', // pending, partial, ready, completed, cancelled
           createdAt: order.createdAt,
           vendorsCount: 0,
           completedVendors: 0,
           rejectedVendors: 0,
+          cancelledVendors: 0,
         }
       }
 
@@ -132,21 +133,34 @@ export async function GET(request, { params }) {
         groupedOrders[parentId].completedVendors++
       } else if (order.status === 'rejected') {
         groupedOrders[parentId].rejectedVendors++
+      } else if (order.status === 'cancelled') {
+        groupedOrders[parentId].cancelledVendors++
       }
     }
 
     // Calculate overall status for each parent order
     for (const parentId in groupedOrders) {
       const group = groupedOrders[parentId]
-      const activeOrders = group.vendorsCount - group.rejectedVendors
+      const activeOrders = group.vendorsCount - group.rejectedVendors - group.cancelledVendors
       
-      if (group.completedVendors === group.vendorsCount) {
+      // If all orders are cancelled, mark as cancelled
+      if (group.cancelledVendors === group.vendorsCount) {
+        group.overallStatus = 'cancelled'
+      }
+      // If all non-cancelled orders are completed, mark as completed
+      else if (group.completedVendors === activeOrders && activeOrders > 0) {
         group.overallStatus = 'completed'
-      } else if (group.completedVendors > 0) {
+      } 
+      // If some orders are completed but not all, mark as partial
+      else if (group.completedVendors > 0) {
         group.overallStatus = 'partial'
-      } else if (group.orders.some(o => o.status === 'ready')) {
+      } 
+      // If any orders are ready, mark as ready
+      else if (group.orders.some(o => o.status === 'ready')) {
         group.overallStatus = 'ready'
-      } else {
+      } 
+      // Default to pending
+      else {
         group.overallStatus = 'pending'
       }
 

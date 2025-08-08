@@ -35,6 +35,7 @@ interface OrderSummary {
   vendors: VendorOrder[]
   completedVendors: number
   rejectedVendors: number
+  cancelledVendors: number
   orderOtp: string
 }
 
@@ -228,6 +229,41 @@ export const useUserOrders = (userId: string | null, activeOrderIds: string[] = 
     setOrderUpdates([])
   }, [])
 
+  // Cancel order function
+  const cancelOrder = useCallback(async (courtId: string, orderId: string, reason: string, token: string) => {
+    try {
+      const response = await fetch(`/api/app/${courtId}/orders/${orderId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ reason })
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        // Update local state to reflect cancellation immediately
+        setOrderSummaries(prevSummaries => 
+          prevSummaries.map(summary => ({
+            ...summary,
+            vendors: summary.vendors.map(vendor => 
+              vendor.id === orderId ? { ...vendor, status: 'cancelled' } : vendor
+            )
+          }))
+        )
+        
+        return { success: true, message: data.message }
+      } else {
+        return { success: false, message: data.message }
+      }
+    } catch (error) {
+      console.error('Error cancelling order:', error)
+      return { success: false, message: 'Failed to cancel order' }
+    }
+  }, [])
+
   return {
     orderSummaries,
     orderUpdates,
@@ -235,6 +271,7 @@ export const useUserOrders = (userId: string | null, activeOrderIds: string[] = 
     updateOrderSummaries,
     getActiveOrderIds,
     clearOrderUpdates,
+    cancelOrder,
     isConnected,
     connectionError: error,
     socket

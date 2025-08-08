@@ -41,9 +41,7 @@ export async function GET(request, { params }) {
     if (queueSection === "upcoming") {
       whereCondition.status = "pending"
     } else if (queueSection === "queue") {
-      whereCondition.status = {
-        [Op.in]: ["accepted", "preparing"]
-      }
+      whereCondition.status = "preparing"
     } else if (queueSection === "ready") {
       whereCondition.status = "ready"
     } else {
@@ -136,7 +134,7 @@ export async function GET(request, { params }) {
     // Get counts for each section for the vendor
     const sectionCounts = await Promise.all([
       Order.count({ where: { vendorId, status: "pending" } }),
-      Order.count({ where: { vendorId, status: { [Op.in]: ["accepted", "preparing"] } } }),
+      Order.count({ where: { vendorId, status: "preparing" } }),
       Order.count({ where: { vendorId, status: "ready" } }),
     ])
 
@@ -215,21 +213,29 @@ export async function PATCH(request, { params }) {
     if (action === "accept") {
       // Get current queue position (last position + 1)
       const maxQueuePosition = await Order.max("queuePosition", {
-        where: { vendorId, status: "accepted" },
+        where: { vendorId, status: { [Op.in]: ["preparing"] } },
       })
       const queuePosition = (maxQueuePosition || 0) + 1
 
-      // Update order to accepted status
+      // Update order directly to preparing status (skip confirmed step)
       await order.update({
-        status: "accepted",
+        status: "preparing",
         queuePosition,
         acceptedAt: new Date(),
+        confirmedAt: new Date(), // Set both acceptedAt and confirmedAt since they mean the same
+        preparingAt: new Date(),
         statusHistory: [
           ...order.statusHistory,
           {
             status: "accepted",
             timestamp: new Date(),
             note: "Order accepted by vendor",
+            updatedBy: user.id,
+          },
+          {
+            status: "preparing",
+            timestamp: new Date(),
+            note: "Order moved to preparation",
             updatedBy: user.id,
           },
         ],
@@ -250,7 +256,7 @@ export async function PATCH(request, { params }) {
         customerPhone: order.customerPhone,
         items: order.items,
         totalAmount: order.totalAmount,
-        status: "accepted",
+        status: "preparing",
         estimatedPreparationTime: order.estimatedPreparationTime,
         queuePosition,
         orderOtp: order.orderOtp,
@@ -290,11 +296,11 @@ export async function PATCH(request, { params }) {
 
       return NextResponse.json({
         success: true,
-        message: "Order accepted successfully",
+        message: "Order accepted and moved to preparation",
         data: {
           orderId: order.id,
           queuePosition,
-          status: "accepted",
+          status: "preparing",
         },
       })
     } else if (action === "reject") {

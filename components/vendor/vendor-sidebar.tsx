@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
-import { Home, Package, Menu, Settings, ChevronLeft, ChevronRight, Plus, LogOut, Clock } from "lucide-react"
+import { Home, Package, Menu, Settings, ChevronLeft, ChevronRight, Plus, LogOut, Clock, ShoppingBag } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
 interface VendorSidebarProps {
@@ -26,6 +26,11 @@ export function VendorSidebar({ courtId }: VendorSidebarProps) {
       name: "Home",
       href: `/vendor/${courtId}`,
       icon: Home,
+    },
+    {
+      name: "Orders",
+      href: `/vendor/${courtId}/orders`,
+      icon: ShoppingBag,
     },
     {
       name: "Queue",

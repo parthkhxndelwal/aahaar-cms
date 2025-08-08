@@ -12,7 +12,7 @@ import DummyPaymentGateway from "@/components/app/dummy-payment-gateway"
 
 export default function CartPage({ params }: { params: Promise<{ courtId: string }> }) {
   const { courtId } = use(params)
-  const { cart, updateQuantity, removeFromCart, isLoading } = useCart()
+  const { cart, updateQuantity, removeFromCart, isLoading, hasActiveOrder, activeOrderError, checkActiveOrders } = useCart()
   const { user, token } = useAppAuth()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [showPaymentGateway, setShowPaymentGateway] = useState(false)
@@ -40,6 +40,13 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
       router.push(`/app/${courtId}/login?returnTo=${encodeURIComponent(`/app/${courtId}/cart`)}`)
     }
   }, [user, token, courtId, router])
+
+  // Check for active orders when cart page loads
+  useEffect(() => {
+    if (user && token) {
+      checkActiveOrders()
+    }
+  }, [user, token, checkActiveOrders])
 
   // Calculate charges
   const itemTotal = cart.total
@@ -73,6 +80,12 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
   const handleCheckout = async () => {
     if (!user || !token) return
 
+    // Check for active orders before proceeding
+    if (hasActiveOrder) {
+      alert(activeOrderError || "You have an active order. Please wait for it to complete before placing a new order.")
+      return
+    }
+
     setCheckoutLoading(true)
     try {
       const response = await fetch(`/api/app/${courtId}/checkout`, {
@@ -94,9 +107,17 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
           setShowPaymentGateway(true)
         } else {
           console.error("Checkout failed:", data.message)
+          alert(data.message || "Checkout failed. Please try again.")
         }
       } else {
-        console.error("Checkout request failed:", response.status)
+        const errorData = await response.json()
+        console.error("Checkout request failed:", response.status, errorData.message)
+        alert(errorData.message || "Checkout failed. Please try again.")
+        
+        // If it's an active order error, refresh the active order check
+        if (response.status === 400 && errorData.message?.includes("active order")) {
+          await checkActiveOrders()
+        }
       }
     } catch (error) {
       console.error("Checkout error:", error)
@@ -459,16 +480,35 @@ export default function CartPage({ params }: { params: Promise<{ courtId: string
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.6 }}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: hasActiveOrder ? 1 : 1.02 }}
+          whileTap={{ scale: hasActiveOrder ? 1 : 0.98 }}
         >
-          <Button
-            className="w-full bg-neutral-600 hover:bg-neutral-700 dark:bg-neutral-100 dark:hover:bg-neutral-50 text-white dark:text-black font-medium py-3 transition-colors"
-            onClick={handleCheckout}
-            disabled={checkoutLoading}
-          >
-            {checkoutLoading ? "Processing..." : "Proceed to Checkout"}
-          </Button>
+          {hasActiveOrder ? (
+            <div className="w-full space-y-3">
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                <div className="text-yellow-800 dark:text-yellow-200 text-sm font-medium">
+                  ⚠️ Active Order Found
+                </div>
+                <div className="text-yellow-700 dark:text-yellow-300 text-xs mt-1">
+                  {activeOrderError}
+                </div>
+              </div>
+              <Button
+                className="w-full bg-gray-400 cursor-not-allowed text-white font-medium py-3"
+                disabled={true}
+              >
+                Checkout Disabled - Active Order
+              </Button>
+            </div>
+          ) : (
+            <Button
+              className="w-full bg-neutral-600 hover:bg-neutral-700 dark:bg-neutral-100 dark:hover:bg-neutral-50 text-white dark:text-black font-medium py-3 transition-colors"
+              onClick={handleCheckout}
+              disabled={checkoutLoading}
+            >
+              {checkoutLoading ? "Processing..." : "Proceed to Checkout"}
+            </Button>
+          )}
         </motion.div>
       </motion.div>
     </motion.div>

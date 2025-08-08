@@ -1,6 +1,7 @@
 "use client"
+
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,12 +10,12 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Phone, Mail, ArrowLeft, Building2 } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
+import { useAppAuth } from "@/contexts/app-auth-context"
 
 export default function UserLogin() {
   const params = useParams()
   const router = useRouter()
-  const { login, user, token } = useAuth()
+  const { login, user, token } = useAppAuth()
   const courtId = params.courtId as string
 
   // Get return URL from query parameters
@@ -30,9 +31,26 @@ export default function UserLogin() {
 
   // Redirect already authenticated users
   useEffect(() => {
+    console.log('🔄 [Login] Auth state changed:', { 
+      hasUser: !!user, 
+      hasToken: !!token, 
+      returnTo,
+      userLoading: !user && !token // If neither user nor token, we're still loading
+    })
+    
     if (user && token) {
+      console.log('🔄 [Login] User authenticated, redirecting...', { 
+        userId: user.id, 
+        hasToken: !!token,
+        returnTo 
+      })
       const redirectUrl = returnTo || `/app/${courtId}`
-      router.push(redirectUrl)
+      console.log(`🎯 [Login] Redirecting to: ${redirectUrl}`)
+      
+      // Use a small delay to ensure cookie is set
+      setTimeout(() => {
+        router.replace(redirectUrl)
+      }, 100)
     }
   }, [user, token, returnTo, courtId, router])
 
@@ -52,14 +70,8 @@ export default function UserLogin() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
-  // Validate court on mount
-  useEffect(() => {
-    if (courtId) {
-      validateCourt()
-    }
-  }, [courtId])
-
-  const validateCourt = async () => {
+  // Validate court on mount - wrapped in useCallback to prevent infinite loops
+  const validateCourt = useCallback(async () => {
     try {
       setCourtLoading(true)
       console.log("🏢 Validating court:", courtId)
@@ -93,7 +105,13 @@ export default function UserLogin() {
     } finally {
       setCourtLoading(false)
     }
-  }
+  }, [courtId])
+
+  useEffect(() => {
+    if (courtId) {
+      validateCourt()
+    }
+  }, [courtId, validateCourt])
 
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -159,10 +177,9 @@ export default function UserLogin() {
       console.log("📥 OTP Login response:", response)
 
       if (response.success) {
+        console.log('✅ [Login] OTP verification successful, logging in user')
         login(response.data.token, response.data.user)
-        // Redirect to return URL if provided, otherwise go to home
-        const redirectUrl = returnTo || `/app/${courtId}`
-        router.push(redirectUrl)
+        // Don't redirect immediately - let the useEffect handle it after state updates
       } else {
         setError(response.message || "Invalid OTP")
       }
@@ -197,10 +214,9 @@ export default function UserLogin() {
       console.log("📥 Email Login response:", response)
 
       if (response.success) {
+        console.log('✅ [Login] Email login successful, logging in user')
         login(response.data.token, response.data.user)
-        // Redirect to return URL if provided, otherwise go to home
-        const redirectUrl = returnTo || `/app/${courtId}`
-        router.push(redirectUrl)
+        // Don't redirect immediately - let the useEffect handle it after state updates
       } else {
         setError(response.message || "Invalid credentials")
       }
@@ -213,6 +229,14 @@ export default function UserLogin() {
 
   const goBack = () => {
     router.push(`/app/login`)
+  }
+
+  const clearAuthData = () => {
+    console.log('🧹 [Login] Manually clearing app auth data')
+    localStorage.removeItem("app_auth_token")
+    localStorage.removeItem("app_auth_user")
+    document.cookie = 'app-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
+    window.location.reload()
   }
 
   // Show loading while validating court
@@ -229,11 +253,38 @@ export default function UserLogin() {
 
   // Show loading while checking authentication
   if (user && token) {
+    // Add a timeout to prevent infinite loading
+    setTimeout(() => {
+      if (user && token) {
+        console.log('⚠️ [Login] Redirect timeout, forcing navigation')
+        const redirectUrl = returnTo || `/app/${courtId}`
+        window.location.href = redirectUrl // Force navigation as fallback
+      }
+    }, 3000)
+
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
         <div className="flex items-center space-x-4">
           <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
-          <span className="text-lg text-white">Already logged in, redirecting...</span>
+          <div className="text-center">
+            <span className="text-lg text-white block">Already logged in, redirecting...</span>
+            <span className="text-sm text-neutral-400 mt-2 block">
+              If this takes too long, <button 
+                onClick={() => {
+                  const redirectUrl = returnTo || `/app/${courtId}`
+                  window.location.href = redirectUrl
+                }}
+                className="text-blue-400 underline"
+              >
+                click here
+              </button> or <button 
+                onClick={clearAuthData}
+                className="text-red-400 underline"
+              >
+                clear auth data
+              </button>
+            </span>
+          </div>
         </div>
       </div>
     )

@@ -57,7 +57,7 @@ export function BottomNavigation({ courtId }: BottomNavigationProps) {
 
     return (
         <motion.div 
-            className="fixed bottom-0 left-0 right-0 bg-white dark:bg-neutral-950 z-50"
+            className="fixed bottom-0 mb-3 left-0 right-0 bg-white dark:bg-neutral-950 z-50"
             initial={{ y: 100 }}
             animate={{ y: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}

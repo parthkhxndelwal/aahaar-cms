@@ -43,14 +43,15 @@ export async function POST(request) {
     // Update order status
     await order.update({
       paymentStatus: "paid",
-      status: "confirmed",
+      status: "preparing",
       confirmedAt: new Date(),
+      preparingAt: new Date(),
       statusHistory: [
         ...order.statusHistory,
         {
-          status: "confirmed",
+          status: "preparing",
           timestamp: new Date(),
-          note: "Payment completed successfully",
+          note: "Payment completed successfully - order moved to preparation",
         },
       ],
     })

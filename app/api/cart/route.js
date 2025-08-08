@@ -9,7 +9,6 @@ export async function GET(request) {
 
     const { user } = authResult
 
-    // Find or create active cart for user
     let cart = await Cart.findOne({
       where: {
         userId: user.id,

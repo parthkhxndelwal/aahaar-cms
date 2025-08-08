@@ -63,7 +63,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: "user_initiated",
       },
       status: {
-        type: DataTypes.ENUM("pending", "accepted", "rejected", "confirmed", "preparing", "ready", "completed", "cancelled"),
+        type: DataTypes.ENUM("pending", "accepted", "rejected", "preparing", "ready", "completed", "cancelled"),
         allowNull: false,
         defaultValue: "pending",
       },
@@ -199,10 +199,6 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 'none',
         comment: 'Refund status for rejected items',
-      },
-      confirmedAt: {
-        type: DataTypes.DATE,
-        allowNull: true,
       },
       preparingAt: {
         type: DataTypes.DATE,

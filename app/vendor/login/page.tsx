@@ -10,11 +10,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, ChefHat, ArrowLeft } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
+import { useVendorAuth } from "@/contexts/vendor-auth-context"
 
 export default function VendorLogin() {
   const router = useRouter()
-  const { login } = useAuth()
+  const { login } = useVendorAuth()
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")

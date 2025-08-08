@@ -23,11 +23,14 @@ interface Cart {
 interface CartContextType {
   cart: Cart
   isLoading: boolean
+  hasActiveOrder: boolean
+  activeOrderError: string | null
   addToCart: (menuItemId: string, quantity?: number, customizations?: Record<string, any>) => Promise<boolean>
   removeFromCart: (menuItemId: string) => Promise<boolean>
   updateQuantity: (menuItemId: string, quantity: number, isRetry?: boolean) => Promise<boolean>
   clearCart: () => Promise<boolean>
   refreshCart: () => Promise<void>
+  checkActiveOrders: () => Promise<void>
   getTotalItems: () => number
 }
 
@@ -38,6 +41,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const [cart, setCart] = useState<Cart>({ items: [], total: 0 })
   const [isLoading, setIsLoading] = useState(false)
+  const [hasActiveOrder, setHasActiveOrder] = useState(false)
+  const [activeOrderError, setActiveOrderError] = useState<string | null>(null)
 
   // Only enable cart functionality on customer app pages
   const isCustomerApp = pathname.startsWith('/app/') && !pathname.endsWith('/login')
@@ -66,6 +71,41 @@ export function CartProvider({ children }: { children: ReactNode }) {
       console.error("Error fetching cart:", error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const checkActiveOrders = async () => {
+    if (!user || !token || !isCustomerApp) {
+      setHasActiveOrder(false)
+      setActiveOrderError(null)
+      return
+    }
+
+    try {
+      const courtId = pathname.split('/')[2] // Extract courtId from path like /app/democourt
+      if (!courtId) return
+
+      const response = await fetch(`/api/app/${courtId}/orders/active`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          const hasActive = data.data.activeOrders.length > 0
+          setHasActiveOrder(hasActive)
+          setActiveOrderError(hasActive ? "You have an active order. Please wait for it to complete before placing a new order." : null)
+        }
+      } else {
+        setHasActiveOrder(false)
+        setActiveOrderError(null)
+      }
+    } catch (error) {
+      console.error("Error checking active orders:", error)
+      setHasActiveOrder(false)
+      setActiveOrderError(null)
     }
   }
 
@@ -226,6 +266,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshCart()
+    checkActiveOrders()
   }, [user, token, isCustomerApp])
 
   return (
@@ -233,11 +274,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
       value={{
         cart,
         isLoading,
+        hasActiveOrder,
+        activeOrderError,
         addToCart,
         removeFromCart,
         updateQuantity,
         clearCart,
         refreshCart,
+        checkActiveOrders,
         getTotalItems,
       }}
     >
