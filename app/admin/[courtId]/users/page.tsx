@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
-import { Search, UserPlus, Mail, Phone, Ban, CheckCircle } from "lucide-react"
+import { Search, UserPlus, Mail, Phone, Trash2 } from "lucide-react"
 import { useAdminAuth } from "@/contexts/admin-auth-context"
 import { useParams } from "next/navigation"
 
@@ -45,7 +46,7 @@ const roleColors = {
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
-  const [updatingUser, setUpdatingUser] = useState<string | null>(null)
+  const [deletingUser, setDeletingUser] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -108,38 +109,52 @@ export default function AdminUsersPage() {
     }
   }
 
-  const updateUserStatus = async (userId: string, newStatus: string) => {
+  const deleteUser = async (userId: string) => {
     try {
-      setUpdatingUser(userId)
-      const response = await fetch(`/api/users/${userId}/status`, {
-        method: "PUT",
+      setDeletingUser(userId)
+      const response = await fetch(`/api/users/${userId}`, {
+        method: "DELETE",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ status: newStatus }),
       })
       
-      const result = await response.json()
-      if (result.success) {
-        setUsers(users.map(user => 
-          user.id === userId ? { ...user, status: newStatus as any } : user
-        ))
+      // Check if response is ok first
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      // Check if response has content before trying to parse JSON
+      const contentType = response.headers.get('content-type')
+      let result
+      
+      if (contentType && contentType.includes('application/json')) {
+        const text = await response.text()
+        result = text ? JSON.parse(text) : { success: true }
+      } else {
+        // If no JSON content, assume success if status is ok
+        result = { success: true }
+      }
+      
+      if (result.success !== false) {
+        setUsers(users.filter(user => user.id !== userId))
         toast({
           title: "Success",
-          description: `User ${newStatus === "active" ? "activated" : newStatus === "blocked" ? "blocked" : "deactivated"}`,
+          description: "User deleted successfully",
         })
       } else {
-        throw new Error(result.message)
+        throw new Error(result.message || "Failed to delete user")
       }
     } catch (error: any) {
+      console.error("Delete user error:", error)
       toast({
         title: "Error",
-        description: error.message || "Failed to update user status",
+        description: error.message || "Failed to delete user",
         variant: "destructive",
       })
     } finally {
-      setUpdatingUser(null)
+      setDeletingUser(null)
     }
   }
 
@@ -387,32 +402,42 @@ export default function AdminUsersPage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                {user.status === "active" ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => updateUserStatus(user.id, "blocked")}
-                                    disabled={updatingUser === user.id}
-                                  >
-                                    {updatingUser === user.id ? (
-                                      <Spinner size={16} variant="white" />
-                                    ) : (
-                                      <Ban className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => updateUserStatus(user.id, "active")}
-                                    disabled={updatingUser === user.id}
-                                  >
-                                    {updatingUser === user.id ? (
-                                      <Spinner size={16} variant="white" />
-                                    ) : (
-                                      <CheckCircle className="h-4 w-4" />
-                                    )}
-                                  </Button>
+                                {/* Delete button - only show for non-vendor users */}
+                                {user.role !== "vendor" && (
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={deletingUser === user.id}
+                                        title="Delete user"
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      >
+                                        {deletingUser === user.id ? (
+                                          <Spinner size={16} variant="white" />
+                                        ) : (
+                                          <Trash2 className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete User</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Are you sure you want to delete user "{user.fullName}"? This action cannot be undone and will permanently remove all user data.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => deleteUser(user.id)}
+                                          className="bg-red-600 hover:bg-red-700"
+                                        >
+                                          Delete
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
                                 )}
                               </div>
                             </TableCell>

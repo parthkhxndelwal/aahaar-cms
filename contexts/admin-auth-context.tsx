@@ -77,7 +77,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     localStorage.removeItem("admin_auth_token")
     localStorage.removeItem("admin_auth_user")
-    router.push("/admin/login")
+    router.push("/admin/auth")
   }
 
   const value = {

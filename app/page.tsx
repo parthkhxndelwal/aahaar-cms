@@ -57,7 +57,7 @@ export default function HomePage() {
       title: "Admin Portal",
       description: "Manage food courts, vendors, and analytics",
       icon: Shield,
-      href: "/admin/login",
+      href: "/admin/auth",
       bgColor: "bg-blue-50 dark:bg-blue-900/20",
       iconColor: "text-blue-600 dark:text-blue-400",
       buttonColor: "bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700",

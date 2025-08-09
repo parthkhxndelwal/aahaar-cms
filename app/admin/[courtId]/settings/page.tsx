@@ -8,12 +8,13 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
-import { Settings, Clock, CreditCard, Users, Shield, Upload, Building, Mail, Phone } from "lucide-react"
+import { Settings, Clock, CreditCard, Users, Shield, Upload, Building, Mail, Phone, Edit3, Save, X } from "lucide-react"
 import { useAdminAuth } from "@/contexts/admin-auth-context"
+import { motion, AnimatePresence } from "framer-motion"
 
 interface CourtSettings {
   // General Settings
@@ -92,9 +93,11 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
   })
   
   const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [showLogoPreview, setShowLogoPreview] = useState(false)
+  const [editingCards, setEditingCards] = useState<{[key: string]: boolean}>({})
+  const [savingCards, setSavingCards] = useState<{[key: string]: boolean}>({})
+  const [originalSettings, setOriginalSettings] = useState<CourtSettings | null>(null)
   const { toast } = useToast()
   const { token } = useAdminAuth()
   const { courtId } = use(params)
@@ -141,6 +144,7 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
             ? fetchedSettings.orderCancellationWindow 
             : prevSettings.orderCancellationWindow,
         }))
+        setOriginalSettings(fetchedSettings)
       }
     } catch (error: any) {
       toast({
@@ -153,9 +157,21 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
     }
   }
 
-  const saveSettings = async () => {
+  const enableCardEdit = (cardName: string) => {
+    setEditingCards(prev => ({ ...prev, [cardName]: true }))
+  }
+
+  const cancelCardEdit = (cardName: string) => {
+    setEditingCards(prev => ({ ...prev, [cardName]: false }))
+    // Reset settings to original values for this card
+    if (originalSettings) {
+      setSettings(prev => ({ ...prev, ...originalSettings }))
+    }
+  }
+
+  const saveCardSettings = async (cardName: string) => {
     try {
-      setSaving(true)
+      setSavingCards(prev => ({ ...prev, [cardName]: true }))
       const response = await fetch(`/api/courts/${courtId}/settings`, {
         method: "PUT",
         headers: {
@@ -167,6 +183,41 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
       
       const result = await response.json()
       if (result.success) {
+        setEditingCards(prev => ({ ...prev, [cardName]: false }))
+        setOriginalSettings(settings)
+        toast({
+          title: "Success",
+          description: `${cardName} settings saved successfully`,
+        })
+      } else {
+        throw new Error(result.message)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || `Failed to save ${cardName} settings`,
+        variant: "destructive",
+      })
+    } finally {
+      setSavingCards(prev => ({ ...prev, [cardName]: false }))
+    }
+  }
+
+  const saveSettings = async () => {
+    // This function is kept for any global save operations if needed
+    try {
+      const response = await fetch(`/api/courts/${courtId}/settings`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(settings),
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        setOriginalSettings(settings)
         toast({
           title: "Success",
           description: "Settings saved successfully",
@@ -180,8 +231,6 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
         description: error.message || "Failed to save settings",
         variant: "destructive",
       })
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -279,45 +328,109 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
 
   const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
+  const renderCardEditControls = (cardName: string) => {
+    const isEditing = editingCards[cardName]
+    const isSaving = savingCards[cardName]
+
+    if (isEditing) {
+      return (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            onClick={() => saveCardSettings(cardName)}
+            disabled={isSaving}
+            className="h-8 w-8 p-0"
+          >
+            {isSaving ? (
+              <Spinner size={12} variant="dark" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => cancelCardEdit(cardName)}
+            disabled={isSaving}
+            className="h-8 w-8 p-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )
+    }
+
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => enableCardEdit(cardName)}
+        className="h-8 w-8 p-0 opacity-60 hover:opacity-100"
+      >
+        <Edit3 className="h-4 w-4" />
+      </Button>
+    )
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="flex items-center justify-center min-h-[400px]"
+      >
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <Spinner size={32} variant="white" />
+          </div>
+          <p className="text-neutral-400">Loading settings...</p>
+        </div>
+      </motion.div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <motion.div 
+        className="flex justify-between items-center"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+      >
         <div>
           <h1 className="text-3xl font-bold text-neutral-100">Settings</h1>
           <p className="text-neutral-400">Configure your food court settings and preferences</p>
         </div>
-        <Button onClick={saveSettings} disabled={saving}>
-          {saving ? "Saving..." : "Save Changes"}
-        </Button>
-      </div>
+      </motion.div>
 
-      <Tabs defaultValue="general" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="hours">Hours</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="orders">Orders</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="general" className="space-y-4">
-          <Card>
+      {/* Settings Cards Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        
+        {/* General Settings Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="xl:col-span-2"
+        >
+          <Card className="bg-neutral-900">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                Basic Information
-              </CardTitle>
-              <CardDescription>Basic information about your food court</CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building className="h-5 w-5" />
+                  <div>
+                    <CardTitle>General Information</CardTitle>
+                    <CardDescription>Basic information about your food court</CardDescription>
+                  </div>
+                </div>
+                {renderCardEditControls("General")}
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -328,15 +441,22 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                     value={settings.instituteName}
                     onChange={(e) => setSettings({ ...settings, instituteName: e.target.value })}
                     placeholder="Enter institute name"
+                    disabled={!editingCards["General"]}
+                    className="bg-[#101010]"
                   />
                 </div>
                 <div>
                   <Label htmlFor="instituteType">Institute Type</Label>
-                  <Select value={settings.instituteType} onValueChange={(value) => setSettings({ ...settings, instituteType: value })}>
-                    <SelectTrigger>
+                  <Select 
+                    value={settings.instituteType} 
+                    onValueChange={(value) => setSettings({ ...settings, instituteType: value })}
+                    disabled={!editingCards["General"]}
+                    
+                  >
+                    <SelectTrigger className="bg-[#101010]">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-[#101010]">
                       <SelectItem value="school">School</SelectItem>
                       <SelectItem value="college">College</SelectItem>
                       <SelectItem value="university">University</SelectItem>
@@ -375,7 +495,7 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                           </div>
                         </div>
                       ) : (
-                        <div className="text-center">
+                        <div className="text-center bg-[#101010]">
                           <Building className="h-8 w-8 text-gray-400 mx-auto mb-1" />
                           <p className="text-xs text-gray-500">No logo</p>
                         </div>
@@ -393,12 +513,12 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                         type="file"
                         accept="image/*"
                         onChange={handleLogoUpload}
-                        disabled={uploading}
+                        disabled={uploading || !editingCards["General"]}
                         className="hidden"
                         id="logo-upload"
                       />
                       <Label htmlFor="logo-upload" className="cursor-pointer">
-                        <Button variant="outline" disabled={uploading} asChild>
+                        <Button variant="outline" className="bg-[#101010]" disabled={uploading || !editingCards["General"]} asChild>
                           <span>
                             <Upload className="h-4 w-4 mr-2" />
                             {uploading ? "Uploading..." : settings.logoUrl ? "Update Logo" : "Upload Logo"}
@@ -410,7 +530,8 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                         <Button 
                           variant="outline" 
                           onClick={() => setSettings({ ...settings, logoUrl: "" })}
-                          disabled={uploading}
+                          disabled={uploading || !editingCards["General"]}
+                          className="bg-[#101010]"
                         >
                           Remove Logo
                         </Button>
@@ -428,37 +549,53 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
 
               <Separator />
 
-              <div>
-                <Label htmlFor="address">Address</Label>
-                <Textarea
-                  id="address"
-                  value={settings.address}
-                  onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-                  placeholder="Enter complete address"
-                  rows={3}
-                />
-              </div>
-              <div>
-                <Label htmlFor="contactPhone">Contact Phone</Label>
-                <Input
-                  id="contactPhone"
-                  value={settings.contactPhone}
-                  onChange={(e) => setSettings({ ...settings, contactPhone: e.target.value })}
-                  placeholder="+91 9876543210"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="address">Address</Label>
+                  <Textarea
+                    id="address"
+                    value={settings.address}
+                    onChange={(e) => setSettings({ ...settings, address: e.target.value })}
+                    placeholder="Enter complete address"
+                    rows={3}
+                    disabled={!editingCards["General"]}
+                    className="bg-[#101010]"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="contactPhone">Contact Phone</Label>
+                  <Input
+                    id="contactPhone"
+                    value={settings.contactPhone}
+                    onChange={(e) => setSettings({ ...settings, contactPhone: e.target.value })}
+                    placeholder="+91 9876543210"
+                    disabled={!editingCards["General"]}
+                    className="bg-[#101010]"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </motion.div>
 
-        <TabsContent value="hours" className="space-y-4">
-          <Card>
+        {/* Operating Hours Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+        >
+          <Card className="bg-neutral-900">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Operating Hours
-              </CardTitle>
-              <CardDescription>Set when your food court is open for orders</CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  <div>
+                    <CardTitle>Operating Hours</CardTitle>
+                    <CardDescription>Set when your food court is open for orders</CardDescription>
+                  </div>
+                </div>
+                {renderCardEditControls("Hours")}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {daysOfWeek.map((day) => (
@@ -469,23 +606,28 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                   <Switch
                     checked={settings.operatingHours[day].isOpen}
                     onCheckedChange={(value) => updateOperatingHours(day, "isOpen", value)}
+                    disabled={!editingCards["Hours"]}
                   />
                   {settings.operatingHours[day].isOpen && (
                     <>
                       <div>
                         <Label>Start Time</Label>
                         <Input
+                        className="bg-[#101010]"
                           type="time"
                           value={settings.operatingHours[day].startTime}
                           onChange={(e) => updateOperatingHours(day, "startTime", e.target.value)}
+                          disabled={!editingCards["Hours"]}
                         />
                       </div>
                       <div>
                         <Label>End Time</Label>
                         <Input
+                        className="bg-[#101010]"
                           type="time"
                           value={settings.operatingHours[day].endTime}
                           onChange={(e) => updateOperatingHours(day, "endTime", e.target.value)}
+                          disabled={!editingCards["Hours"]}
                         />
                       </div>
                     </>
@@ -494,83 +636,109 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
               ))}
             </CardContent>
           </Card>
-        </TabsContent>
+        </motion.div>
 
-        <TabsContent value="payments" className="space-y-4">
-          <Card>
+        {/* Payment Settings Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+        >
+          <Card className="bg-neutral-900">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Payment Methods
-              </CardTitle>
-              <CardDescription>Configure payment methods and commission</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="h-5 w-5" />
-                      <div>
-                        <Label>Online Payments</Label>
-                        <p className="text-sm text-gray-500">Accept payments via Razorpay</p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={settings.enableOnlinePayments}
-                      onCheckedChange={(value) => setSettings({ ...settings, enableOnlinePayments: value })}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-5 h-5 rounded bg-green-500 flex items-center justify-center text-white text-xs">₹</div>
-                      <div>
-                        <Label>Cash on Delivery</Label>
-                        <p className="text-sm text-gray-500">Allow cash payments at pickup</p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={settings.enableCOD}
-                      onCheckedChange={(value) => setSettings({ ...settings, enableCOD: value })}
-                    />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5" />
+                  <div>
+                    <CardTitle>Payment Methods</CardTitle>
+                    <CardDescription>Configure payment methods and commission</CardDescription>
                   </div>
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="razorpayKeyId">Razorpay Key ID</Label>
-                    <Input
-                      id="razorpayKeyId"
-                      value={settings.razorpayKeyId || ""}
-                      onChange={(e) => setSettings({ ...settings, razorpayKeyId: e.target.value })}
-                      placeholder="rzp_test_xxxxxxxxxx"
-                      disabled={!settings.enableOnlinePayments}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Enter your Razorpay Key ID</p>
+                {renderCardEditControls("Payments")}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <CreditCard className="h-5 w-5" />
+                    <div>
+                      <Label>Online Payments</Label>
+                      <p className="text-sm text-gray-500">Accept payments via Razorpay</p>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="platformCommission">Platform Commission (%)</Label>
-                    <Input
-                      id="platformCommission"
-                      type="number"
-                      min="0"
-                      max="50"
-                      step="0.1"
-                      value={!settings.platformCommission && settings.platformCommission !== 0 ? "" : settings.platformCommission.toString()}
-                      onChange={(e) => setSettings({ ...settings, platformCommission: parseFloat(e.target.value) || 0 })}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Commission charged per order</p>
+                  <Switch
+                    checked={settings.enableOnlinePayments}
+                    onCheckedChange={(value) => setSettings({ ...settings, enableOnlinePayments: value })}
+                    disabled={!editingCards["Payments"]}
+                  />
+                </div>
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded bg-green-500 flex items-center justify-center text-white text-xs">₹</div>
+                    <div>
+                      <Label>Cash on Delivery</Label>
+                      <p className="text-sm text-gray-500">Allow cash payments at pickup</p>
+                    </div>
                   </div>
+                  <Switch
+                    checked={settings.enableCOD}
+                    onCheckedChange={(value) => setSettings({ ...settings, enableCOD: value })}
+                    disabled={!editingCards["Payments"]}
+                  />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="razorpayKeyId">Razorpay Key ID</Label>
+                  <Input
+                    id="razorpayKeyId"
+                    value={settings.razorpayKeyId || ""}
+                    onChange={(e) => setSettings({ ...settings, razorpayKeyId: e.target.value })}
+                    placeholder="rzp_test_xxxxxxxxxx"
+                    disabled={!settings.enableOnlinePayments || !editingCards["Payments"]}
+                    className="bg-[#101010]"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Enter your Razorpay Key ID</p>
+                </div>
+                <div>
+                  <Label htmlFor="platformCommission">Platform Commission (%)</Label>
+                  <Input
+                    id="platformCommission"
+                    type="number"
+                    min="0"
+                    max="50"
+                    step="0.1"
+                    value={!settings.platformCommission && settings.platformCommission !== 0 ? "" : settings.platformCommission.toString()}
+                    onChange={(e) => setSettings({ ...settings, platformCommission: parseFloat(e.target.value) || 0 })}
+                    disabled={!editingCards["Payments"]}
+                    className="bg-[#101010]"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Commission charged per order</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </motion.div>
 
-        <TabsContent value="orders" className="space-y-4">
-          <Card>
+        {/* Order Management Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+        >
+          <Card className="bg-neutral-900">
             <CardHeader>
-              <CardTitle>Order Management</CardTitle>
-              <CardDescription>Configure order processing settings</CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Settings className="h-5 w-5" />
+                  <div>
+                    <CardTitle>Order Management</CardTitle>
+                    <CardDescription>Configure order processing settings</CardDescription>
+                  </div>
+                </div>
+                {renderCardEditControls("Orders")}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -581,6 +749,8 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                   min="1"
                   value={!settings.maxOrdersPerStall && settings.maxOrdersPerStall !== 0 ? "" : settings.maxOrdersPerStall.toString()}
                   onChange={(e) => setSettings({ ...settings, maxOrdersPerStall: parseInt(e.target.value) || 1 })}
+                  disabled={!editingCards["Orders"]}
+                  className="bg-[#101010]"
                 />
               </div>
               <div>
@@ -591,9 +761,11 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                   min="0"
                   value={!settings.orderBufferTime && settings.orderBufferTime !== 0 ? "" : settings.orderBufferTime.toString()}
                   onChange={(e) => setSettings({ ...settings, orderBufferTime: parseInt(e.target.value) || 0 })}
+                  disabled={!editingCards["Orders"]}
+                  className="bg-[#101010]"
                 />
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
                   <Label>Auto-confirm Orders</Label>
                   <p className="text-sm text-gray-500">Automatically confirm orders without vendor approval</p>
@@ -601,65 +773,87 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                 <Switch
                   checked={settings.autoConfirmOrders}
                   onCheckedChange={(value) => setSettings({ ...settings, autoConfirmOrders: value })}
+                  disabled={!editingCards["Orders"]}
+                />
+              </div>
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <Label>Allow Advance Orders</Label>
+                  <p className="text-sm text-gray-500">Allow users to place orders for future delivery</p>
+                </div>
+                <Switch
+                  checked={settings.allowAdvanceOrders}
+                  onCheckedChange={(value) => setSettings({ ...settings, allowAdvanceOrders: value })}
+                  disabled={!editingCards["Orders"]}
                 />
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </motion.div>
 
-        <TabsContent value="users" className="space-y-4">
-          <Card>
+        {/* User Access Control Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+        >
+          <Card className="bg-neutral-900">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                User Access Control
-              </CardTitle>
-              <CardDescription>Configure user access and verification settings</CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  <div>
+                    <CardTitle>User Access Control</CardTitle>
+                    <CardDescription>Configure user access and verification settings</CardDescription>
+                  </div>
+                </div>
+                {renderCardEditControls("Users")}
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Mail className="h-5 w-5" />
-                      <div>
-                        <Label>Email Verification</Label>
-                        <p className="text-sm text-gray-500">Require email verification before ordering</p>
-                      </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Mail className="h-5 w-5" />
+                    <div>
+                      <Label>Email Verification</Label>
+                      <p className="text-sm text-gray-500">Require email verification before ordering</p>
                     </div>
-                    <Switch
-                      checked={settings.requireEmailVerification}
-                      onCheckedChange={(value) => setSettings({ ...settings, requireEmailVerification: value })}
-                    />
                   </div>
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Phone className="h-5 w-5" />
-                      <div>
-                        <Label>Phone Verification</Label>
-                        <p className="text-sm text-gray-500">Require phone verification before ordering</p>
-                      </div>
+                  <Switch
+                    checked={settings.requireEmailVerification}
+                    onCheckedChange={(value) => setSettings({ ...settings, requireEmailVerification: value })}
+                    disabled={!editingCards["Users"]}
+                  />
+                </div>
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Phone className="h-5 w-5" />
+                    <div>
+                      <Label>Phone Verification</Label>
+                      <p className="text-sm text-gray-500">Require phone verification before ordering</p>
                     </div>
-                    <Switch
-                      checked={settings.requirePhoneVerification}
-                      onCheckedChange={(value) => setSettings({ ...settings, requirePhoneVerification: value })}
-                    />
                   </div>
+                  <Switch
+                    checked={settings.requirePhoneVerification}
+                    onCheckedChange={(value) => setSettings({ ...settings, requirePhoneVerification: value })}
+                    disabled={!editingCards["Users"]}
+                  />
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="maxOrdersPerUser">Max Orders per User (per day)</Label>
-                    <Input
-                      id="maxOrdersPerUser"
-                      type="number"
-                      min="1"
-                      max="50"
-                      value={!settings.maxOrdersPerUser && settings.maxOrdersPerUser !== 0 ? "" : settings.maxOrdersPerUser.toString()}
-                      onChange={(e) => setSettings({ ...settings, maxOrdersPerUser: parseInt(e.target.value) || 1 })}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Maximum orders a user can place per day</p>
-                  </div>
-                </div>
+              </div>
+              <div>
+                <Label htmlFor="maxOrdersPerUser">Max Orders per User (per day)</Label>
+                <Input
+                  id="maxOrdersPerUser"
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={!settings.maxOrdersPerUser && settings.maxOrdersPerUser !== 0 ? "" : settings.maxOrdersPerUser.toString()}
+                  onChange={(e) => setSettings({ ...settings, maxOrdersPerUser: parseInt(e.target.value) || 1 })}
+                  disabled={!editingCards["Users"]}
+                  className="bg-[#101010]"
+                />
+                <p className="text-xs text-gray-500 mt-1">Maximum orders a user can place per day</p>
               </div>
 
               <Separator />
@@ -671,8 +865,10 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                   <div className="flex gap-2">
                     <Input
                       placeholder="e.g., college.edu, company.com"
+                      disabled={!editingCards["Users"]}
+                      className="bg-[#101010]"
                       onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === 'Enter' && editingCards["Users"]) {
                           addEmailDomain(e.currentTarget.value)
                           e.currentTarget.value = ''
                         }
@@ -680,9 +876,10 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                     />
                     <Button
                       type="button"
+                      disabled={!editingCards["Users"]}
                       onClick={(e) => {
                         const input = e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement
-                        if (input?.value) {
+                        if (input?.value && editingCards["Users"]) {
                           addEmailDomain(input.value)
                           input.value = ''
                         }
@@ -697,8 +894,9 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
                         <Badge key={index} variant="secondary" className="flex items-center gap-1">
                           {domain}
                           <button
-                            onClick={() => removeEmailDomain(domain)}
-                            className="ml-1 text-red-500 hover:text-red-700"
+                            onClick={() => editingCards["Users"] && removeEmailDomain(domain)}
+                            className={`ml-1 text-red-500 hover:text-red-700 ${!editingCards["Users"] ? 'cursor-not-allowed opacity-50' : ''}`}
+                            disabled={!editingCards["Users"]}
                           >
                             ×
                           </button>
@@ -710,72 +908,89 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </motion.div>
 
-        <TabsContent value="advanced" className="space-y-4">
-          <Card>
+        {/* Advanced Settings Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.7 }}
+          className="xl:col-span-2"
+        >
+          <Card className="bg-neutral-900">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Advanced Settings
-              </CardTitle>
-              <CardDescription>Advanced configuration options for your food court</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
                   <div>
-                    <Label htmlFor="timezone">Timezone</Label>
-                    <Select value={settings.timezone} onValueChange={(value) => setSettings({ ...settings, timezone: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
-                        <SelectItem value="Asia/Dubai">Asia/Dubai (GST)</SelectItem>
-                        <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
-                        <SelectItem value="America/New_York">America/New_York (EST)</SelectItem>
-                        <SelectItem value="America/Los_Angeles">America/Los_Angeles (PST)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="minimumOrderAmount">Minimum Order Amount (₹)</Label>
-                    <Input
-                      id="minimumOrderAmount"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={!settings.minimumOrderAmount && settings.minimumOrderAmount !== 0 ? "" : settings.minimumOrderAmount.toString()}
-                      onChange={(e) => setSettings({ ...settings, minimumOrderAmount: parseFloat(e.target.value) || 0 })}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Minimum amount required to place an order</p>
+                    <CardTitle>Advanced Settings</CardTitle>
+                    <CardDescription>Advanced configuration options for your food court</CardDescription>
                   </div>
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="maximumOrderAmount">Maximum Order Amount (₹)</Label>
-                    <Input
-                      id="maximumOrderAmount"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={!settings.maximumOrderAmount && settings.maximumOrderAmount !== 0 ? "" : settings.maximumOrderAmount.toString()}
-                      onChange={(e) => setSettings({ ...settings, maximumOrderAmount: parseFloat(e.target.value) || 0 })}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Maximum amount allowed per order</p>
-                  </div>
-                  <div>
-                    <Label htmlFor="orderCancellationWindow">Order Cancellation Window (minutes)</Label>
-                    <Input
-                      id="orderCancellationWindow"
-                      type="number"
-                      min="0"
-                      value={!settings.orderCancellationWindow && settings.orderCancellationWindow !== 0 ? "" : settings.orderCancellationWindow.toString()}
-                      onChange={(e) => setSettings({ ...settings, orderCancellationWindow: parseInt(e.target.value) || 0 })}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Time allowed for customers to cancel orders</p>
-                  </div>
+                {renderCardEditControls("Advanced")}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <Label htmlFor="timezone">Timezone</Label>
+                  <Select 
+                    value={settings.timezone} 
+                    onValueChange={(value) => setSettings({ ...settings, timezone: value })}
+                    disabled={!editingCards["Advanced"]}
+                  >
+                    <SelectTrigger className={!editingCards["Advanced"] ? "opacity-50" : ""}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
+                      <SelectItem value="Asia/Dubai">Asia/Dubai (GST)</SelectItem>
+                      <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
+                      <SelectItem value="America/New_York">America/New_York (EST)</SelectItem>
+                      <SelectItem value="America/Los_Angeles">America/Los_Angeles (PST)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="minimumOrderAmount">Minimum Order Amount (₹)</Label>
+                  <Input
+                    id="minimumOrderAmount"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={!settings.minimumOrderAmount && settings.minimumOrderAmount !== 0 ? "" : settings.minimumOrderAmount.toString()}
+                    onChange={(e) => setSettings({ ...settings, minimumOrderAmount: parseFloat(e.target.value) || 0 })}
+                    disabled={!editingCards["Advanced"]}
+                    className="bg-[#101010]"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Minimum amount required to place an order</p>
+                </div>
+                <div>
+                  <Label htmlFor="maximumOrderAmount">Maximum Order Amount (₹)</Label>
+                  <Input
+                    id="maximumOrderAmount"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={!settings.maximumOrderAmount && settings.maximumOrderAmount !== 0 ? "" : settings.maximumOrderAmount.toString()}
+                    onChange={(e) => setSettings({ ...settings, maximumOrderAmount: parseFloat(e.target.value) || 0 })}
+                    disabled={!editingCards["Advanced"]}
+                    className="bg-[#101010]"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Maximum amount allowed per order</p>
+                </div>
+                <div>
+                  <Label htmlFor="orderCancellationWindow">Order Cancellation Window (minutes)</Label>
+                  <Input
+                    id="orderCancellationWindow"
+                    type="number"
+                    min="0"
+                    value={!settings.orderCancellationWindow && settings.orderCancellationWindow !== 0 ? "" : settings.orderCancellationWindow.toString()}
+                    onChange={(e) => setSettings({ ...settings, orderCancellationWindow: parseInt(e.target.value) || 0 })}
+                    disabled={!editingCards["Advanced"]}
+                    className="bg-[#101010]"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Time allowed for customers to cancel orders</p>
                 </div>
               </div>
 
@@ -794,8 +1009,8 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </motion.div>
+      </div>
 
       {/* Logo Preview Modal */}
       {showLogoPreview && settings.logoUrl && (
@@ -824,6 +1039,6 @@ export default function AdminSettingsPage({ params }: { params: Promise<{ courtI
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }

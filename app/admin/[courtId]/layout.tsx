@@ -22,7 +22,7 @@ export default function AdminLayout({
 
   useEffect(() => {
     if (!loading && (!user || user.role !== "admin" || user.courtId !== courtId)) {
-      router.push("/admin/login")
+      router.push("/admin/auth")
     }
   }, [user, loading, courtId, router])
 

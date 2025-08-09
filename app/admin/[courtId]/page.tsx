@@ -39,7 +39,7 @@ export default function AdminDashboard({ params }: { params: Promise<{ courtId: 
 
   useEffect(() => {
     if (!user || user.role !== "admin" || user.courtId !== courtId) {
-      router.push("/admin/login")
+      router.push("/admin/auth")
       return
     }
 
